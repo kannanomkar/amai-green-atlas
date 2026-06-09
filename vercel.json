@@ -1,12 +1,6 @@
-```json
 {
-  "cleanUrls": true,
-  "trailingSlash": false,
+  "outputDirectory": ".",
   "rewrites": [
-    {
-      "source": "/p/:id",
-      "destination": "/index.html"
-    }
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
-```
