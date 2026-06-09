@@ -1942,4 +1942,3 @@ function previewPlantMarker(
     .addTo(map);
 
 }
-V3 PART 7D – map.js (Filters + Search + Statistics + QR Integration)
