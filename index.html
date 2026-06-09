@@ -1,0 +1,1529 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>AMAI Green Atlas – Chengannur Biodiversity Atlas</title>
+
+<meta name="description"
+content="Community-driven biodiversity atlas of Chengannur Legislative Assembly Constituency by AMAI Chengannur.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<link rel="stylesheet"
+href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<link rel="stylesheet"
+href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+
+<link rel="stylesheet"
+href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+
+body{
+font-family:'Inter',sans-serif;
+background:#f7faf7;
+}
+
+.hero-gradient{
+background:
+linear-gradient(
+135deg,
+#14532d 0%,
+#166534 40%,
+#22c55e 100%
+);
+}
+
+.glass-card{
+backdrop-filter:blur(10px);
+background:rgba(255,255,255,.12);
+border:1px solid rgba(255,255,255,.15);
+}
+
+.stat-card{
+transition:.25s;
+}
+
+.stat-card:hover{
+transform:translateY(-3px);
+}
+
+.section-title{
+font-size:2rem;
+font-weight:800;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<!-- ==================================
+     NAVIGATION
+================================== -->
+
+<nav
+class="bg-white shadow-sm sticky top-0 z-50">
+
+<div
+class="max-w-7xl mx-auto px-4 py-4">
+
+<div
+class="flex items-center justify-between">
+
+<div
+class="flex items-center gap-3">
+
+<div
+class="w-12 h-12 rounded-full bg-green-700 text-white flex items-center justify-center text-xl">
+
+🌿
+
+</div>
+
+<div>
+
+<h1
+class="font-bold text-lg">
+
+AMAI Green Atlas
+
+</h1>
+
+<p
+class="text-xs text-gray-500">
+
+Chengannur Biodiversity Atlas
+
+</p>
+
+</div>
+
+</div>
+
+<div
+class="hidden md:flex items-center gap-6">
+
+<a href="#home"
+class="hover:text-green-700">
+
+Home
+
+</a>
+
+<a href="#statistics"
+class="hover:text-green-700">
+Statistics
+
+</a>
+
+<a href="#mapSection"
+class="hover:text-green-700">
+
+Map
+
+</a>
+
+<a href="#heritageSection"
+class="hover:text-green-700">
+
+Heritage Trees
+
+</a>
+
+<a href="#contributorsSection"
+class="hover:text-green-700">
+
+Contributors
+
+</a>
+
+<a href="login.html"
+class="bg-green-700 text-white px-4 py-2 rounded-lg">
+
+Login
+
+</a>
+
+</div>
+
+<button
+id="mobileMenuBtn"
+class="md:hidden text-2xl">
+
+☰
+
+</button>
+
+</div>
+
+<div
+id="mobileMenu"
+class="hidden mt-4 flex flex-col gap-3">
+
+<a href="#home">Home</a>
+
+<a href="#statistics">Statistics</a>
+
+<a href="#mapSection">Map</a>
+
+<a href="#heritageSection">Heritage Trees</a>
+
+<a href="#contributorsSection">Contributors</a>
+
+<a
+href="login.html"
+class="bg-green-700 text-white px-4 py-2 rounded-lg text-center">
+
+Login
+
+</a>
+
+</div>
+
+</div>
+
+</nav>
+
+<!-- ==================================
+     HERO SECTION
+================================== -->
+
+<section
+id="home"
+class="hero-gradient text-white">
+
+<div
+class="max-w-7xl mx-auto px-4 py-20">
+
+<div
+class="grid lg:grid-cols-2 gap-10 items-center">
+
+<div>
+
+<div
+class="inline-flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full mb-5">
+
+🌿 Community Biodiversity Project
+
+</div>
+
+<h1
+class="text-5xl lg:text-6xl font-black leading-tight">
+
+Mapping the Trees & Medicinal Plants of Chengannur
+
+</h1>
+
+<p
+class="mt-6 text-lg text-green-50">
+
+A citizen-science initiative by the Ayurveda Medical Association of India (AMAI), Chengannur Area, documenting biodiversity, medicinal plants, heritage trees, and ecological wealth across the Chengannur Legislative Assembly Constituency.
+
+</p>
+
+<div
+class="mt-8 flex flex-wrap gap-4">
+
+<a
+href="#mapSection"
+class="bg-white text-green-800 font-semibold px-6 py-3 rounded-xl">
+
+Explore Map
+
+</a>
+
+<a
+href="login.html"
+class="glass-card px-6 py-3 rounded-xl">
+
+Contribute Plants
+
+</a>
+
+</div>
+
+</div>
+
+<div>
+
+<div
+class="glass-card rounded-3xl p-8">
+
+<h3
+class="text-2xl font-bold mb-6">
+
+Atlas Highlights
+
+</h3>
+
+<div
+class="grid grid-cols-2 gap-4">
+
+<div
+class="bg-white/10 rounded-xl p-4">
+
+<div class="text-3xl mb-2">
+🌳
+</div>
+
+<div class="font-bold">
+Mapped Trees
+</div>
+
+<div
+id="heroTreeCount"
+class="text-2xl font-black">
+
+0
+
+</div>
+
+</div>
+
+<div
+class="bg-white/10 rounded-xl p-4">
+
+<div class="text-3xl mb-2">
+🌿
+</div>
+
+<div class="font-bold">
+Species
+</div>
+
+<div
+id="heroSpeciesCount"
+class="text-2xl font-black">
+
+0
+
+</div>
+
+</div>
+
+<div
+class="bg-white/10 rounded-xl p-4">
+
+<div class="text-3xl mb-2">
+🏛️
+</div>
+
+<div class="font-bold">
+Heritage Trees
+</div>
+
+<div
+id="heroHeritageCount"
+class="text-2xl font-black">
+
+0
+
+</div>
+
+</div>
+
+<div
+class="bg-white/10 rounded-xl p-4">
+
+<div class="text-3xl mb-2">
+👥
+</div>
+
+<div class="font-bold">
+Contributors
+</div>
+
+<div
+id="heroContributorCount"
+class="text-2xl font-black">
+
+0
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+<!-- ==================================
+     ABOUT SECTION
+================================== -->
+
+<section
+class="py-20 bg-white">
+
+<div
+class="max-w-7xl mx-auto px-4">
+
+<div
+class="text-center mb-14">
+
+<h2
+class="section-title">
+
+About the Project
+
+</h2>
+
+<p
+class="mt-4 text-gray-600 max-w-3xl mx-auto">
+
+AMAI Green Atlas is a long-term biodiversity documentation initiative aimed at mapping trees, medicinal plants, rare species, and heritage trees throughout the Chengannur constituency. The project encourages participation from schools, eco-clubs, NSS units, local communities, and biodiversity enthusiasts.
+
+</p>
+
+</div>
+
+<div
+class="grid md:grid-cols-3 gap-8">
+
+<div
+class="bg-green-50 p-8 rounded-2xl">
+
+<div class="text-5xl mb-4">
+🌳
+</div>
+
+<h3
+class="font-bold text-xl mb-3">
+
+Tree Mapping
+
+</h3>
+
+<p class="text-gray-600">
+
+Document and preserve important tree specimens throughout the constituency.
+
+</p>
+
+</div>
+
+<div
+class="bg-green-50 p-8 rounded-2xl">
+
+<div class="text-5xl mb-4">
+🌿
+</div>
+
+<h3
+class="font-bold text-xl mb-3">
+
+Medicinal Plants
+
+</h3>
+
+<p class="text-gray-600">
+
+Create a living digital catalogue of medicinal plants used in Ayurveda and traditional healthcare.
+
+</p>
+
+</div>
+
+<div
+class="bg-green-50 p-8 rounded-2xl">
+
+<div class="text-5xl mb-4">
+🏛️
+</div>
+
+<h3
+class="font-bold text-xl mb-3">
+
+Heritage Registry
+
+</h3>
+
+<p class="text-gray-600">
+
+Identify, protect and celebrate historically, culturally and ecologically significant trees.
+
+</p>
+
+</div>
+
+</div>
+
+</div>
+
+</section>
+<!-- ==================================
+     LIVE STATISTICS
+================================== -->
+
+<section
+id="statistics"
+class="py-16 bg-slate-50">
+
+<div
+class="max-w-7xl mx-auto px-4">
+
+<div
+class="text-center mb-10">
+
+<h2
+class="section-title">
+
+Live Biodiversity Statistics
+
+</h2>
+
+<p
+class="text-gray-600 mt-3">
+
+Updated directly from the Green Atlas database.
+
+</p>
+
+</div>
+
+<div
+class="grid grid-cols-2 lg:grid-cols-4 gap-6">
+
+<div
+class="stat-card bg-white rounded-2xl shadow-sm p-6 text-center">
+
+<div class="text-4xl mb-2">
+🌳
+</div>
+
+<div
+class="text-sm text-gray-500">
+
+Total Plants
+
+</div>
+
+<div
+id="totalPlantsCount"
+class="text-4xl font-black text-green-700 mt-2">
+
+0
+
+</div>
+
+</div>
+
+<div
+class="stat-card bg-white rounded-2xl shadow-sm p-6 text-center">
+
+<div class="text-4xl mb-2">
+🌿
+</div>
+
+<div
+class="text-sm text-gray-500">
+
+Species
+
+</div>
+
+<div
+id="speciesCount"
+class="text-4xl font-black text-green-700 mt-2">
+
+0
+
+</div>
+
+</div>
+
+<div
+class="stat-card bg-white rounded-2xl shadow-sm p-6 text-center">
+
+<div class="text-4xl mb-2">
+🏛️
+</div>
+
+<div
+class="text-sm text-gray-500">
+
+Heritage Trees
+
+</div>
+
+<div
+id="heritageCount"
+class="text-4xl font-black text-blue-700 mt-2">
+
+0
+
+</div>
+
+</div>
+
+<div
+class="stat-card bg-white rounded-2xl shadow-sm p-6 text-center">
+
+<div class="text-4xl mb-2">
+👥
+</div>
+
+<div
+class="text-sm text-gray-500">
+
+Contributors
+
+</div>
+
+<div
+id="contributorsCount"
+class="text-4xl font-black text-purple-700 mt-2">
+
+0
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+<!-- ==================================
+     MAP SEARCH & FILTERS
+================================== -->
+
+<section
+id="mapSection"
+class="py-16 bg-white">
+
+<div
+class="max-w-7xl mx-auto px-4">
+
+<div
+class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
+
+<div>
+
+<h2
+class="section-title">
+
+Interactive Biodiversity Map
+
+</h2>
+
+<p
+class="text-gray-600 mt-2">
+
+Explore verified plants and heritage trees across Chengannur.
+
+</p>
+
+</div>
+
+<div
+class="flex flex-wrap gap-3">
+
+<button
+id="locateMeBtn"
+class="bg-green-700 text-white px-5 py-3 rounded-xl">
+
+📍 Locate Me
+
+</button>
+
+<button
+id="refreshMapBtn"
+class="bg-slate-700 text-white px-5 py-3 rounded-xl">
+
+🔄 Refresh
+
+</button>
+
+</div>
+
+</div>
+
+<!-- SEARCH BAR -->
+
+<div
+class="bg-slate-50 rounded-2xl p-5 mb-6">
+
+<div
+class="grid lg:grid-cols-5 gap-4">
+
+<div
+class="lg:col-span-2">
+
+<input
+
+id="searchInput"
+
+type="text"
+
+placeholder="Search by Atlas Number, Local Name, Scientific Name..."
+
+class="w-full border rounded-xl p-3">
+
+</div>
+
+<div>
+
+<select
+id="
+panchayatFilter"
+class="w-full border rounded-xl p-3">
+
+<option value="">
+All Panchayats
+</option>
+
+</select>
+
+</div>
+
+<div>
+
+<select
+id="speciesFilter"
+class="w-full border rounded-xl p-3">
+
+<option value="">
+All Species
+</option>
+
+</select>
+
+</div>
+
+<div>
+
+<select
+id="heritageFilter"
+class="w-full border rounded-xl p-3">
+
+<option value="">
+All Plants
+</option>
+
+<option value="heritage">
+Heritage Trees Only
+</option>
+
+<option value="verified">
+Verified Plants Only
+</option>
+
+</select>
+
+</div>
+
+</div>
+
+<div
+class="flex flex-wrap gap-3 mt-4">
+
+<button
+id="searchBtn"
+class="bg-green-700 text-white px-5 py-2 rounded-lg">
+
+🔍 Search
+
+</button>
+
+<button
+id="resetFiltersBtn"
+class="bg-slate-500 text-white px-5 py-2 rounded-lg">
+
+Reset Filters
+
+</button>
+
+</div>
+
+</div>
+
+<!-- LEGEND -->
+
+<div
+class="flex flex-wrap gap-6 mb-5 text-sm">
+
+<div
+class="flex items-center gap-2">
+
+<div
+class="w-4 h-4 rounded-full bg-green-600">
+</div>
+
+<span>
+Verified Plant
+</span>
+
+</div>
+
+<div
+class="flex items-center gap-2">
+
+<div
+class="w-4 h-4 rounded-full bg-blue-600">
+</div>
+
+<span>
+Heritage Tree
+</span>
+
+</div>
+
+<div
+class="flex items-center gap-2">
+
+<span class="text-xl">
+🌳
+</span>
+
+<span>
+Tree
+</span>
+
+</div>
+
+<div
+class="flex items-center gap-2">
+
+<span class="text-xl">
+🌿
+</span>
+
+<span>
+Medicinal Herb
+</span>
+
+</div>
+
+<div
+class="flex items-center gap-2">
+
+<span class="text-xl">
+🌺
+</span>
+
+<span>
+Rare Plant
+</span>
+
+</div>
+
+<div
+class="flex items-center gap-2">
+
+<span class="text-xl">
+🥭
+</span>
+
+<span>
+Fruit Tree
+</span>
+
+</div>
+
+<div
+class="flex items-center gap-2">
+
+<span class="text-xl">
+🌴
+</span>
+
+<span>
+Palm
+</span>
+
+</div>
+
+</div>
+
+<!-- MAP -->
+
+<div
+class="bg-white rounded-3xl shadow-lg overflow-hidden border">
+
+<div
+id="map"
+
+style="
+height:700px;
+width:100%;
+">
+
+</div>
+
+</div>
+
+<div
+class="grid md:grid-cols-4 gap-4 mt-6">
+
+<div
+class="bg-green-50 rounded-xl p-4 text-center">
+
+<div
+class="text-sm text-gray-500">
+
+Visible Plants
+
+</div>
+
+<div
+id="visiblePlantCount"
+class="text-3xl font-black text-green-700">
+
+0
+
+</div>
+
+</div>
+
+<div
+class="bg-blue-50 rounded-xl p-4 text-center">
+
+<div
+class="text-sm text-gray-500">
+
+Visible Species
+
+</div>
+
+<div
+id="visibleSpeciesCount"
+class="text-3xl font-black text-blue-700">
+
+0
+
+</div>
+
+</div>
+
+<div
+class="bg-purple-50 rounded-xl p-4 text-center">
+
+<div
+class="text-sm text-gray-500">
+
+Panchayats Covered
+
+</div>
+
+<div
+id="visiblePanchayatCount"
+class="text-3xl font-black text-purple-700">
+
+0
+
+</div>
+
+</div>
+
+<div
+class="bg-orange-50 rounded-xl p-4 text-center">
+
+<div
+class="text-sm text-gray-500">
+
+Heritage Trees
+
+</div>
+
+<div
+id="visibleHeritageCount"
+class="text-3xl font-black text-orange-700">
+
+0
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+<!-- ==================================
+     RECENT CONTRIBUTIONS
+================================== -->
+
+<section
+class="py-16 bg-slate-50">
+
+<div
+class="max-w-7xl mx-auto px-4">
+
+<div
+class="flex items-center justify-between mb-8">
+
+<div>
+
+<h2
+class="section-title">
+
+Recent Contributions
+
+</h2>
+
+<p
+class="text-gray-600 mt-2">
+
+Recently verified additions to the atlas.
+
+</p>
+
+</div>
+
+<a
+href="login.html"
+class="bg-green-700 text-white px-5 py-3 rounded-xl">
+
+Contribute Now
+
+</a>
+
+</div>
+
+<div
+id="recentContributions"
+
+class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+<!-- Filled by JavaScript -->
+
+</div>
+
+</div>
+
+</section>
+<!-- ==================================
+     HERITAGE TREES
+================================== -->
+
+<section
+id="heritageSection"
+class="py-16 bg-white">
+
+<div
+class="max-w-7xl mx-auto px-4">
+
+<div
+class="text-center mb-10">
+
+<h2
+class="section-title">
+
+🏛️ Heritage Trees Registry
+
+</h2>
+
+<p
+class="text-gray-600 mt-3">
+
+Historically, culturally, and ecologically significant trees identified across Chengannur.
+
+</p>
+
+</div>
+
+<div
+id="heritageTreesGrid"
+class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+<!-- Filled dynamically -->
+
+</div>
+
+</div>
+
+</section>
+
+<!-- ==================================
+     CONTRIBUTOR LEADERBOARD
+================================== -->
+
+<section
+id="contributorsSection"
+class="py-16 bg-slate-50">
+
+<div
+class="max-w-7xl mx-auto px-4">
+
+<div
+class="text-center mb-10">
+
+<h2
+class="section-title">
+
+🏆 Top Contributors
+
+</h2>
+
+<p
+class="text-gray-600 mt-3">
+
+Recognizing volunteers helping document Chengannur's biodiversity.
+
+</p>
+
+</div>
+
+<div
+class="bg-white rounded-3xl shadow-lg overflow-hidden">
+
+<table
+class="w-full">
+
+<thead
+class="bg-green-700 text-white">
+
+<tr>
+
+<th class="p-4 text-left">
+Rank
+</th>
+
+<th class="p-4 text-left">
+Contributor
+</th>
+
+<th class="p-4 text-left">
+Plants Added
+</th>
+
+</tr>
+
+</thead>
+
+<tbody
+id="leaderboardTable">
+
+<!-- Filled dynamically -->
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+</section>
+
+<!-- ==================================
+     PLANT DETAILS MODAL
+================================== -->
+
+<div
+id="plantModal"
+class="fixed inset-0 bg-black/70 hidden z-[9999] overflow-y-auto">
+
+<div
+class="min-h-screen flex items-center justify-center p-4">
+
+<div
+class="bg-white rounded-3xl w-full max-w-4xl overflow-hidden">
+
+<div
+class="flex justify-between items-center p-5 border-b">
+
+<h3
+id="modalPlantTitle"
+class="text-2xl font-bold">
+
+Plant Details
+
+</h3>
+
+<button
+id="closePlantModal"
+class="text-3xl">
+
+×
+
+</button>
+
+</div>
+
+<div
+class="p-6">
+
+<img
+id="modalCoverPhoto"
+
+src=""
+
+class="w-full h-80 object-cover rounded-2xl mb-6">
+
+<div
+class="grid md:grid-cols-2 gap-6">
+
+<div>
+
+<div class="mb-4">
+
+<div class="text-sm text-gray-500">
+Atlas Number
+</div>
+
+<div
+id="modalAtlasNumber"
+class="font-bold">
+
+</div>
+
+</div>
+
+<div class="mb-4">
+
+<div class="text-sm text-gray-500">
+Scientific Name
+</div>
+
+<div
+id="modalScientificName"
+class="font-bold italic">
+
+</div>
+
+</div>
+
+<div class="mb-4">
+
+<div class="text-sm text-gray-500">
+Local Name
+</div>
+
+<div
+id="modalLocalName">
+
+</div>
+
+</div>
+
+<div class="mb-4">
+
+<div class="text-sm text-gray-500">
+Contributor
+</div>
+
+<div
+id="modalContributor">
+
+</div>
+
+</div>
+
+</div>
+
+<div>
+
+<div class="mb-4">
+
+<div class="text-sm text-gray-500">
+Description
+</div>
+
+<div
+id="modalDescription">
+
+</div>
+
+</div>
+
+<div class="mb-4">
+
+<div class="text-sm text-gray-500">
+Panchayat
+</div>
+
+<div
+id="modalPanchayat">
+
+</div>
+
+</div>
+
+<div class="mb-4">
+
+<div class="text-sm text-gray-500">
+Photo Count
+</div>
+
+<div
+id="modalPhotoCount">
+
+0
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<div
+class="flex flex-wrap gap-3 mt-8">
+
+<a
+id="openPlantPageBtn"
+href="#"
+
+class="bg-green-700 text-white px-5 py-3 rounded-xl">
+
+Open Plant Page
+
+</a>
+
+<button
+id="showQRBtn"
+class="bg-blue-700 text-white px-5 py-3 rounded-xl">
+
+QR Code
+
+</button>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- ==================================
+     PHOTO GALLERY MODAL
+================================== -->
+
+<div
+id="galleryModal"
+class="fixed inset-0 bg-black/80 hidden z-[9999]">
+
+<div
+class="min-h-screen flex items-center justify-center p-4">
+
+<div
+class="bg-white rounded-3xl w-full max-w-6xl p-6">
+
+<div
+class="flex justify-between items-center mb-6">
+
+<h3
+class="text-2xl font-bold">
+
+Plant Gallery
+
+</h3>
+
+<button
+id="closeGalleryModal"
+class="text-3xl">
+
+×
+
+</button>
+
+</div>
+
+<div
+id="galleryContainer"
+class="grid md:grid-cols-3 lg:grid-cols-4 gap-4">
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- ==================================
+     QR MODAL
+================================== -->
+
+<div
+id="qrModal"
+class="fixed inset-0 bg-black/70 hidden z-[9999]">
+
+<div
+class="min-h-screen flex items-center justify-center p-4">
+
+<div
+class="bg-white rounded-3xl p-8 w-full max-w-md text-center">
+
+<h3
+class="text-2xl font-bold mb-6">
+
+Plant QR Code
+
+</h3>
+
+<div
+id="qrcode"
+class="flex justify-center">
+
+</div>
+
+<button
+id="closeQRModal"
+class="mt-6 bg-red-600 text-white px-5 py-3 rounded-xl">
+
+Close
+
+</button>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- ==================================
+     FOOTER
+================================== -->
+
+<footer
+class="bg-green-900 text-white py-12">
+
+<div
+class="max-w-7xl mx-auto px-4">
+
+<div
+class="grid md:grid-cols-3 gap-8">
+
+<div>
+
+<h3
+class="font-bold text-xl mb-3">
+
+🌿 AMAI Green Atlas
+
+</h3>
+
+<p
+class="text-green-100">
+
+Community biodiversity atlas documenting trees, medicinal plants, and ecological heritage of Chengannur.
+
+</p>
+
+</div>
+
+<div>
+
+<h4
+class="font-bold mb-3">
+
+Project
+
+</h4>
+
+<ul class="space-y-2">
+
+<li>
+Tree Mapping
+</li>
+
+<li>
+Medicinal Plants
+</li>
+
+<li>
+Heritage Registry
+</li>
+
+<li>
+Citizen Science
+</li>
+
+</ul>
+
+</div>
+
+<div>
+
+<h4
+class="font-bold mb-3">
+
+Organized By
+
+</h4>
+
+<p>
+
+Ayurveda Medical Association of India (AMAI)
+
+</p>
+
+<p>
+
+Chengannur Area
+
+</p>
+
+</div>
+
+</div>
+
+<div
+class="border-t border-green-800 mt-10 pt-6 text-center text-green-200">
+
+© 2026 AMAI Green Atlas • Chengannur Biodiversity Atlas
+
+</div>
+
+</div>
+
+</footer>
+
+<!-- ==================================
+     JS LIBRARIES
+================================== -->
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<!-- ==================================
+     APP FILES
+================================== -->
+
+<script src="js/supabase.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/profiles.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/plants.js"></script>
+<script src="js/map.js"></script>
+<script src="js/analytics.js"></script>
+<script src="js/qr.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
