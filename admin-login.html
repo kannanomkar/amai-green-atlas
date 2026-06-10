@@ -1,0 +1,65 @@
+
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>AMAI Green Atlas Login</title>
+
+<link rel="stylesheet"
+href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script src="js/supabase.js"></script>
+<script src="js/auth.js"></script>
+
+</head>
+
+<body class="bg-green-50 min-h-screen flex items-center justify-center">
+
+<div class="bg-white p-8 rounded-xl shadow-xl w-full max-w-md">
+
+<h1 class="text-2xl font-bold mb-6">
+🌿 AMAI Green Atlas
+</h1>
+
+<input
+id="email"
+type="email"
+placeholder="Email"
+class="border p-3 rounded w-full mb-3">
+
+<input
+id="password"
+type="password"
+placeholder="Password"
+class="border p-3 rounded w-full mb-3">
+
+<button
+id="passwordLoginBtn"
+class="bg-green-700 text-white w-full p-3 rounded mb-3">
+
+Login
+
+</button>
+
+<button
+id="otpLoginBtn"
+class="bg-blue-700 text-white w-full p-3 rounded">
+
+Send OTP Login Link
+
+</button>
+
+<p
+id="message"
+class="mt-4 text-center text-sm">
+</p>
+
+</div>
+
+</body>
+
+</html>
