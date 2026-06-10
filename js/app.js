@@ -743,3 +743,6 @@ err
 );
 
 }
+if("serviceWorker" in navigator){
+   ...
+}
