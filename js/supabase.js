@@ -15,7 +15,7 @@ const SUPABASE_URL =
 "https://kcavwosmwfmcespztwuw.supabase.co";
 
 const SUPABASE_ANON_KEY =
-"YOUR_ANON_KEY_HERE";
+"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtjYXZ3b3Ntd2ZtY2VzcHp0d3V3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5MjU1NDcsImV4cCI6MjA5NjUwMTU0N30.38ZOmXvltuZy68MKY9-vodgNO2QKiM7DNLoMs-jTquU";
 
 /*
 =====================================
