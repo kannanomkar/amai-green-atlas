@@ -32,19 +32,16 @@ async function loginPassword(){
 
     if(error){
 
-        showMessage(
-            error.message,
-            true
-        );
+    showMessage(
+        error.message,
+        true
+    );
 
-        return;
-    }
-
-   const profile = await getProfile();
+    return;
+}
 
 window.location.href =
 "index.html";
-
 }
 
 async function loginOTP(){
