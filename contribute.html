@@ -238,7 +238,73 @@ function initMap(){
 
         }
     );
+document
+.getElementById(
+    "locateMeBtn"
+)
+.addEventListener(
 
+    "click",
+
+    function(){
+
+        if(
+            !navigator.geolocation
+        ){
+
+            alert(
+                "Geolocation not supported"
+            );
+
+            return;
+
+        }
+
+        navigator.geolocation.getCurrentPosition(
+
+            function(position){
+
+                const lat =
+                position.coords.latitude;
+
+                const lng =
+                position.coords.longitude;
+
+                map.setView(
+                    [lat,lng],
+                    18
+                );
+
+                document.getElementById(
+                    "latitude"
+                ).value =
+                lat.toFixed(6);
+
+                document.getElementById(
+                    "longitude"
+                ).value =
+                lng.toFixed(6);
+
+                if(marker){
+
+                    map.removeLayer(
+                        marker
+                    );
+
+                }
+
+                marker =
+                L.marker(
+                    [lat,lng]
+                ).addTo(map);
+
+            }
+
+        );
+
+    }
+
+);
 }
 
 /* =====================================
