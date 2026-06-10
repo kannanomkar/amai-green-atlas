@@ -1029,24 +1029,61 @@ async function getPlantsByPanchayat(
 
 async function getDashboardStats(){
 
-    const {
+    try{
 
-        count:plantCount
+        const { count: plantCount } =
+        await supabaseClient
+        .from("plants")
+        .select("*",{count:"exact",head:true})
+        .eq("verification_status","verified");
 
-    } =
+        const { count: speciesCount } =
+        await supabaseClient
+        .from("species")
+        .select("*",{count:"exact",head:true});
 
-    await supabaseClient
+        const { count: heritageCount } =
+        await supabaseClient
+        .from("plants")
+        .select("*",{count:"exact",head:true})
+        .eq("is_heritage",true);
 
-    .from("plants")
+        const { count: contributorCount } =
+        await supabaseClient
+        .from("profiles")
+        .select("*",{count:"exact",head:true});
 
-    .select(
-        "*",
-        {
-            count:"exact",
-            head:true
-        }
-    )
+        return {
 
-    .eq(
-        "verification_status",
-       
+            plantCount:
+            plantCount || 0,
+
+            speciesCount:
+            speciesCount || 0,
+
+            heritageCount:
+            heritageCount || 0,
+
+            contributorCount:
+            contributorCount || 0
+
+        };
+
+    }
+
+    catch(error){
+
+        console.error(error);
+
+        return {
+
+            plantCount:0,
+            speciesCount:0,
+            heritageCount:0,
+            contributorCount:0
+
+        };
+
+    }
+
+}
