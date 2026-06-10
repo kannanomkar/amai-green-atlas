@@ -40,8 +40,23 @@ async function loginPassword(){
     return;
 }
 
-window.location.href =
-"index.html";
+if(
+    window.location.pathname
+    .includes(
+        "admin-login"
+    )
+){
+
+    window.location.href =
+    "admin.html";
+
+}
+else{
+
+    window.location.href =
+    "index.html";
+
+}
 }
 
 async function loginOTP(){
