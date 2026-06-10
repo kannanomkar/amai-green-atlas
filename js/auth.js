@@ -42,18 +42,8 @@ async function loginPassword(){
 
    const profile = await getProfile();
 
-if(
-    profile &&
-    (
-        profile.role === "admin" ||
-        profile.role === "superadmin"
-    )
-){
-    window.location.href = "admin.html";
-}
-else{
-    window.location.href = "index.html";
-}
+window.location.href =
+"index.html";
 
 }
 
