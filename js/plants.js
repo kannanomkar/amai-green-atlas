@@ -254,6 +254,18 @@ async function createPlant({
             atlas_number:
             atlasNumber,
 
+           local_name:
+            local_name,
+
+            english_name:
+            english_name,
+
+            scientific_name:
+            scientific_name,
+
+             description:
+             description,
+
             species_id:
             species.id,
 
