@@ -1,4 +1,4 @@
-```javascript
+
 /* =====================================
    AMAI GREEN ATLAS V3
    STORAGE.JS
@@ -625,4 +625,4 @@ async function renderPhotoGallery(
     });
 
 }
-```
+
