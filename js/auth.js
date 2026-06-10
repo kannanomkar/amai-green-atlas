@@ -40,8 +40,20 @@ async function loginPassword(){
         return;
     }
 
-    window.location.href =
-    "index.html";
+   const profile = await getProfile();
+
+if(
+    profile &&
+    (
+        profile.role === "admin" ||
+        profile.role === "superadmin"
+    )
+){
+    window.location.href = "admin.html";
+}
+else{
+    window.location.href = "index.html";
+}
 
 }
 
