@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>Plant Details | AMAI Green Atlas</title>
+
+<link rel="stylesheet"
+href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
+<link rel="stylesheet"
+href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+
+body{
+background:#f8fafc;
+font-family:Inter,sans-serif;
+}
+
+#plantMap{
+height:400px;
+width:100%;
+border-radius:20px;
+}
+
+.gallery-image{
+height:220px;
+width:100%;
+object-fit:cover;
+border-radius:16px;
+cursor:pointer;
+transition:.2s;
+}
+
+.gallery-image:hover{
+transform:scale(1.02);
+}
+
+.badge{
+padding:6px 12px;
+border-radius:999px;
+font-size:12px;
+font-weight:700;
+}
+
+.badge-heritage{
+background:#dbeafe;
+color:#1d4ed8;
+}
+
+.badge-verified{
+background:#dcfce7;
+color:#166534;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<!-- =====================================
+NAVBAR
+===================================== -->
+
+<nav
+class="bg-green-800 text-white">
+
+<div
+class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+
+<a
+href="index.html"
+class="font-bold text-xl">
+
+🌿 AMAI Green Atlas
+
+</a>
+
+<div>
+
+<a
+href="index.html"
+class="hover:underline">
+
+Back To Map
+
+</a>
+
+</div>
+
+</div>
+
+</nav>
+
+<!-- =====================================
+HEADER
+===================================== -->
+
+<section
+class="bg-white shadow-sm">
+
+<div
+class="max-w-7xl mx-auto px-4 py-10">
+
+<div
+class="flex flex-wrap gap-3 mb-4">
+
+<span
+id="verificationBadge"
+class="badge badge-verified">
+
+Verified
+
+</span>
+
+<span
+id="heritageBadge"
+class="badge badge-heritage hidden">
+
+🏛 Heritage Tree
+
+</span>
+
+</div>
+
+<h1
+id="plantTitle"
+class="text-4xl font-black">
+
+Loading...
+
+</h1>
+
+<p
+id="scientificName"
+class="italic text-xl text-gray-600 mt-2">
+
+</p>
+
+<div
+class="mt-4 text-sm text-gray-500">
+
+Atlas Number:
+
+<span
+id="atlasNumber">
+
+</span>
+
+</div>
+
+</div>
+
+</section>
+
+<!-- =====================================
+MAIN
+===================================== -->
+
+<div
+class="max-w-7xl mx-auto px-4 py-8">
+
+<div
+class="grid lg:grid-cols-3 gap-8">
+
+<!-- LEFT -->
+
+<div
+class="lg:col-span-2 space-y-8">
+
+<!-- COVER -->
+
+<div
+class="bg-white rounded-3xl shadow overflow-hidden">
+
+<img
+
+id="coverPhoto"
+
+src=""
+
+class="w-full h-[450px] object-cover">
+
+</div>
+
+<!-- GALLERY -->
+
+<div
+class="bg-white rounded-3xl shadow p-6">
+
+<h2
+class="text-2xl font-bold mb-5">
+
+📸 Photo Gallery
+
+</h2>
+
+<div
+id="photoGallery"
+class="grid md:grid-cols-3 gap-4">
+
+</div>
+
+</div>
+
+<!-- DESCRIPTION -->
+
+<div
+class="bg-white rounded-3xl shadow p-6">
+
+<h2
+class="text-2xl font-bold mb-4">
+
+🌿 Species Information
+
+</h2>
+
+<div
+id="speciesDescription">
+
+No description available.
+
+</div>
+
+</div>
+
+<!-- YOUTUBE -->
+
+<div
+class="bg-white rounded-3xl shadow p-6">
+
+<h2
+class="text-2xl font-bold mb-4">
+
+🎥 Ayurvedic Videos
+
+</h2>
+
+<div
+id="videoContainer"
+class="space-y-6">
+
+</div>
+
+</div>
+
+<!-- OBSERVATIONS -->
+
+<div
+class="bg-white rounded-3xl shadow p-6">
+
+<h2
+class="text-2xl font-bold mb-4">
+
+📝 Field Observations
+
+</h2>
+
+<div
+id="observationsContainer">
+
+</div>
+
+</div>
+
+</div>
+
+<!-- RIGHT -->
+
+<div
+class="space-y-6">
+
+<!-- DETAILS -->
+
+<div
+class="bg-white rounded-3xl shadow p-6">
+
+<h2
+class="text-xl font-bold mb-4">
+
+Plant Details
+
+</h2>
+
+<div class="space-y-3">
+
+<div>
+
+<div class"text-sm text-gray-500">
+
+Local Name
+
+</div>
+
+<div
+id="detailLocalName"
+class="font-semibold">
+
+</div>
+
+</div>
+
+<div>
+
+<div
+class="text-sm text-gray-500">
+
+English Name
+
+</div>
+
+<div
+id="detailEnglishName"
+class="font-semibold">
+
+</div>
+
+</div>
+
+<div>
+
+<div
+class="text-sm text-gray-500">
+
+Scientific Name
+
+</div>
+
+<div
+id="detailScientificName"
+class="italic">
+
+</div>
+
+</div>
+
+<div>
+
+<div
+class="text-sm text-gray-500">
+
+Contributor
+
+</div>
+
+<div
+id="detailContributor">
+
+</div>
+
+</div>
+
+<div>
+
+<div
+class="text-sm text-gray-500">
+
+Panchayat
+
+</div>
+
+<div
+id="detailPanchayat">
+
+</div>
+
+</div>
+
+<div>
+
+<div
+class="text-sm text-gray-500">
+
+Photos
+
+</div>
+
+<div
+id="detailPhotoCount">
+
+0
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- QR -->
+
+<div
+class="bg-white rounded-3xl shadow p-6">
+
+<h2
+class="text-xl font-bold mb-4">
+
+QR Code
+
+</h2>
+
+<div
+id="plantQRCode"
+class="flex justify-center">
+
+</div>
+
+<button
+id="downloadQRBtn"
+class="mt-4 w-full bg-green-700 text-white py-3 rounded-xl">
+
+Download QR
+
+</button>
+
+</div>
+
+<!-- MAP -->
+
+<div
+class="bg-white rounded-3xl shadow p-6">
+
+<h2
+class="text-xl font-bold mb-4">
+
+Location
+
+</h2>
+
+<div
+id="plantMap">
+
+</div>
+
+</div>
+
+<!-- RELATED -->
+
+<div
+class="bg-white rounded-3xl shadow p-6">
+
+<h2
+class="text-xl font-bold mb-4">
+
+Related Records
+
+</h2>
+
+<div
+id="relatedPlants"
+class="space-y-3">
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- IMAGE MODAL -->
+
+<div
+id="imageModal"
+class="hidden fixed inset-0 bg-black/90 z-[9999]">
+
+<div
+class="h-screen flex items-center justify-center p-6">
+
+<button
+id="closeImageModal"
+class="absolute top-6 right-6 text-white text-5xl">
+
+×
+
+</button>
+
+<img
+id="modalImage"
+src=""
+class="max-h-[90vh] max-w-[90vw]">
+
+</div>
+
+</div>
+
+<!-- SCRIPTS -->
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<script src="js/supabase.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/profiles.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/plants.js"></script>
+<script src="js/qr.js"></script>
+
+<script>
+
+let plantId;
+let plantData;
+let plantMap;
+
+/* =====================================
+GET ID
+===================================== */
+
+const params =
+new URLSearchParams(
+window.location.search
+);
+
+plantId =
+params.get("id");
+
+/* =====================================
+LOAD PAGE
+===================================== */
+
+async function loadPlantPage(){
+
+    if(!plantId){
+
+        window.location.href =
+        "index.html";
+
+        return;
+
+    }
+
+    plantData =
+    await getPlant(
+        plantId
+    );
+
+    if(!plantData){
+
+        alert(
+            "Plant not found"
+        );
+
+        return;
+    }
+
+    renderPlant();
+
+    await loadPhotos();
+
+    await loadVideos();
+
+    await loadObservations();
+
+    await loadRelatedPlants();
+
+    initMap();
+
+    generatePlantQRCode();
+
+}
+
+/* =====================================
+RENDER
+===================================== */
+
+function renderPlant(){
+
+    const species =
+    plantData.species || {};
+
+    document.title =
+    (species.local_name || "Plant")
+    +
+    " | AMAI Green Atlas";
+
+    document.getElementById(
+        "plantTitle"
+    ).textContent =
+
+    species.local_name ||
+    species.english_name ||
+    "Plant";
+
+    document.getElementById(
+        "scientificName"
+    ).textContent =
+
+    species.scientific_name || "";
+
+    document.getElementById(
+        "atlasNumber"
+    ).textContent =
+
+    plantData.atlas_number || "";
+
+    document.getElementById(
+        "coverPhoto"
+    ).src =
+
+    plantData.cover_photo_url ||
+
+    "https://placehold.co/1000x700?text=Plant";
+
+    document.getElementById(
+        "speciesDescription"
+    ).textContent =
+
+    species.description ||
+
+    "No description available.";
+
+    document.getElementById(
+        "detailLocalName"
+    ).textContent =
+
+    species.local_name || "";
+
+    document.getElementById(
+        "detailEnglishName"
+    ).textContent =
+
+    species.english_name || "";
+
+    document.getElementById(
+        "detailScientificName"
+    ).textContent =
+
+    species.scientific_name || "";
+
+    document.getElementById(
+        "detailContributor"
+    ).textContent =
+
+    plantData.contributor_name || "";
+
+    document.getElementById(
+        "detailPhotoCount"
+    ).textContent =
+
+    plantData.photo_count || 0;
+
+    if(plantData.is_heritage){
+
+        document
+        .getElementById("heritageBadge")
+        .classList.remove("hidden");
+
+    }
+
+}
+
+/* =====================================
+LOAD PHOTOS
+===================================== */
+
+async function loadPhotos(){
+
+    const photos =
+        await getPlantPhotos(plantId);
+
+    const gallery =
+        document.getElementById("photoGallery");
+
+    if(!gallery) return;
+
+    if(photos.length === 0){
+        gallery.innerHTML =
+            `<p class="text-gray-400 col-span-3">No photos yet.</p>`;
+        return;
+    }
+
+    // Set first photo as cover if no cover set
+    if(!plantData.cover_photo_url && photos[0]){
+        document.getElementById("coverPhoto").src =
+            photos[0].photo_url;
+    }
+
+    gallery.innerHTML = "";
+
+    photos.forEach(photo => {
+
+        const div = document.createElement("div");
+
+        div.innerHTML = `
+        <img
+            src="${photo.photo_url}"
+            class="gallery-image"
+            onclick="openImageModal('${photo.photo_url}')"
+            onerror="this.src='https://placehold.co/400x300?text=Photo'"
+        >
+        <div class="text-xs text-gray-500 mt-1 text-center">
+            ${photo.caption || ""}
+        </div>`;
+
+        gallery.appendChild(div);
+
+    });
+
+}
+
+/* =====================================
+LOAD VIDEOS
+===================================== */
+
+async function loadVideos(){
+
+    const videos =
+        await getPlantVideos(plantId);
+
+    const container =
+        document.getElementById("videoContainer");
+
+    if(!container) return;
+
+    if(videos.length === 0){
+        container.innerHTML =
+            `<p class="text-gray-400">No videos added yet.</p>`;
+        return;
+    }
+
+    container.innerHTML = "";
+
+    videos.forEach(video => {
+
+        // Extract YouTube video ID
+        let videoId = "";
+
+        try{
+            const url = new URL(video.youtube_url);
+            videoId =
+                url.searchParams.get("v") ||
+                url.pathname.replace("/","");
+        } catch(e){
+            videoId = video.youtube_url;
+        }
+
+        container.innerHTML += `
+        <div>
+            <div class="font-semibold mb-2">
+                ${video.title || "Video"}
+            </div>
+            <div class="rounded-2xl overflow-hidden" style="position:relative;padding-bottom:56.25%;height:0;">
+                <iframe
+                    src="https://www.youtube.com/embed/${videoId}"
+                    style="position:absolute;top:0;left:0;width:100%;height:100%;"
+                    frameborder="0"
+                    allowfullscreen>
+                </iframe>
+            </div>
+        </div>`;
+
+    });
+
+}
+
+/* =====================================
+LOAD OBSERVATIONS
+===================================== */
+
+async function loadObservations(){
+
+    const observations =
+        await getObservations(plantId);
+
+    const container =
+        document.getElementById("observationsContainer");
+
+    if(!container) return;
+
+    if(observations.length === 0){
+        container.innerHTML =
+            `<p class="text-gray-400">No field observations recorded yet.</p>`;
+        return;
+    }
+
+    const healthColors = {
+        good:    "bg-green-100 text-green-800",
+        fair:    "bg-yellow-100 text-yellow-800",
+        poor:    "bg-red-100 text-red-800",
+        unknown: "bg-gray-100 text-gray-800"
+    };
+
+    container.innerHTML = observations.map(obs => {
+
+        const color =
+            healthColors[obs.health_status] ||
+            healthColors.unknown;
+
+        const date = obs.created_at
+            ? new Date(obs.created_at).toLocaleDateString("en-IN")
+            : "";
+
+        return `
+        <div class="border rounded-2xl p-4 mb-3">
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-sm text-gray-400">${date}</span>
+                ${obs.health_status
+                    ? `<span class="text-xs font-bold px-3 py-1 rounded-full ${color}">
+                        ${obs.health_status}
+                    </span>`
+                    : ""
+                }
+            </div>
+            <p class="text-gray-700">${obs.notes || ""}</p>
+        </div>`;
+
+    }).join("");
+
+}
+
+/* =====================================
+LOAD RELATED PLANTS
+===================================== */
+
+async function loadRelatedPlants(){
+
+    const container =
+        document.getElementById("relatedPlants");
+
+    if(!container || !plantData.species?.id) return;
+
+    try{
+
+        const { data, error } =
+            await supabaseClient
+            .from("plants")
+            .select(`*, species(*)`)
+            .eq("species_id", plantData.species.id)
+            .eq("verification_status", "verified")
+            .neq("id", plantId)
+            .limit(3);
+
+        if(error || !data || data.length === 0){
+            container.innerHTML =
+                `<p class="text-gray-400 text-sm">No related records.</p>`;
+            return;
+        }
+
+        container.innerHTML = data.map(p => `
+        <a
+            href="plant.html?id=${p.id}"
+            class="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition">
+
+            <img
+                src="${p.cover_photo_url || 'https://placehold.co/80x80/16a34a/white?text=🌿'}"
+                class="w-14 h-14 object-cover rounded-xl flex-shrink-0">
+
+            <div>
+                <div class="font-semibold text-sm">
+                    ${p.species?.local_name || p.species?.english_name || "Plant"}
+                </div>
+                <div class="text-xs text-gray-400">
+                    ${p.atlas_number || ""}
+                </div>
+            </div>
+
+        </a>`).join("");
+
+    } catch(e){
+        console.error("Related plants error:", e);
+    }
+
+}
+
+/* =====================================
+MAP
+===================================== */
+
+function initMap(){
+
+    if(
+        !plantData.latitude ||
+        !plantData.longitude
+    ) return;
+
+    plantMap = L.map("plantMap").setView(
+        [plantData.latitude, plantData.longitude],
+        16
+    );
+
+    L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        { attribution: "© OpenStreetMap" }
+    ).addTo(plantMap);
+
+    L.marker(
+        [plantData.latitude, plantData.longitude]
+    )
+    .addTo(plantMap)
+    .bindPopup(
+        plantData.species?.local_name || "Plant"
+    )
+    .openPopup();
+
+}
+
+/* =====================================
+QR CODE
+===================================== */
+
+function generatePlantQRCode(){
+
+    const container =
+        document.getElementById("plantQRCode");
+
+    if(!container) return;
+
+    container.innerHTML = "";
+
+    const url =
+        `${window.location.origin}/plant.html?id=${plantId}`;
+
+    new QRCode(container, {
+        text: url,
+        width: 200,
+        height: 200,
+        colorDark: "#14532d",
+        colorLight: "#ffffff"
+    });
+
+    // Download button
+    document
+    .getElementById("downloadQRBtn")
+    ?.addEventListener("click", () => {
+
+        const canvas =
+            container.querySelector("canvas");
+
+        if(!canvas) return;
+
+        const link = document.createElement("a");
+        link.download = `plant-${plantData.atlas_number || plantId}.png`;
+        link.href = canvas.toDataURL();
+        link.click();
+
+    });
+
+}
+
+/* =====================================
+IMAGE MODAL
+===================================== */
+
+function openImageModal(src){
+
+    document.getElementById("modalImage").src = src;
+    document.getElementById("imageModal")
+        .classList.remove("hidden");
+
+}
+
+document.getElementById("closeImageModal")
+    ?.addEventListener("click", () => {
+        document.getElementById("imageModal")
+            .classList.add("hidden");
+    });
+
+document.getElementById("imageModal")
+    ?.addEventListener("click", function(e){
+        if(e.target === this)
+            this.classList.add("hidden");
+    });
+
+/* =====================================
+START
+===================================== */
+
+document.addEventListener(
+
+    "DOMContentLoaded",
+
+    loadPlantPage
+
+);
+
+</script>
+
+</body>
+</html>
