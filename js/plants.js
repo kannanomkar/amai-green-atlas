@@ -190,9 +190,12 @@ async function createPlant({
     description,
     latitude,
     longitude,
+    panchayat_id,
     contributor_name,
     contributor_association,
-    contributor_phone
+    contributor_phone,
+    school_name,
+    organization_name
 
 }){
 
@@ -268,6 +271,15 @@ contributor_name,
 contributor_association,
 
 contributor_phone,
+
+            school_name:
+            school_name || null,
+
+            organization_name:
+            organization_name || null,
+
+            panchayat_id:
+            panchayat_id || null,
 
             verification_status:
             "pending",
@@ -508,6 +520,11 @@ async function getHeritageTrees(){
     .eq(
         "is_heritage",
         true
+    )
+
+    .eq(
+        "verification_status",
+        "verified"
     );
 
     if(error){
@@ -1049,7 +1066,8 @@ async function getDashboardStats(){
         await supabaseClient
         .from("plants")
         .select("*",{count:"exact",head:true})
-        .eq("is_heritage",true);
+        .eq("is_heritage",true)
+        .eq("verification_status","verified");
 
         const { count: contributorCount } =
         await supabaseClient
