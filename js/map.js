@@ -1431,7 +1431,7 @@ function createAddPlantModal(){
 
     class="border p-3 rounded-xl">
 
-    <input
+  
 
   <input
 id="contributorAssociation"
