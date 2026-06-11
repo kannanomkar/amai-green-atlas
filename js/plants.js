@@ -182,37 +182,21 @@ async function findOrCreateSpecies({
 async function createPlant({
 
     scientific_name,
-
     english_name,
-
     local_name,
-
     description,
-
     latitude,
-
     longitude,
-
     contributor_name,
-
-    school_name,
-
-    organization_name
+    contributor_association,
+    contributor_phone
 
 }){
 
     try{
 
-        const ownerId =
-        await getCurrentUserId();
-
-        if(!ownerId){
-
-            throw new Error(
-                "Login required"
-            );
-
-        }
+   const ownerId =
+await getCurrentUserId();
 
         const species =
         await findOrCreateSpecies({
@@ -274,13 +258,13 @@ async function createPlant({
             longitude,
 
             owner_id:
-            ownerId,
+ownerId,
 
-            contributor_name,
+contributor_name,
 
-            school_name,
+contributor_association,
 
-            organization_name,
+contributor_phone,
 
             verification_status:
             "pending",
@@ -303,15 +287,19 @@ async function createPlant({
 
         }
 
-        await logActivity(
+   if(ownerId){
 
-            ownerId,
+    await logActivity(
 
-            "Plant Added",
+        ownerId,
 
-            data.id
+        "Plant Added",
 
-        );
+        data.id
+
+    );
+
+}
 
         return data;
 
