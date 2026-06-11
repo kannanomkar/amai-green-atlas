@@ -1433,19 +1433,10 @@ function createAddPlantModal(){
 
     <input
 
-    id="schoolName"
-
-    placeholder="School Name"
-
-    class="border p-3 rounded-xl">
-
-    <input
-
-    id="organizationName"
-
-    placeholder="Organization Name"
-
-    class="border p-3 rounded-xl">
+  <input
+id="contributorAssociation"
+placeholder="Association / School / Eco Club / Organization"
+class="border p-3 rounded-xl">
 
     </div>
 
