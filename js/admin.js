@@ -1,11 +1,12 @@
 /* =====================================
    AMAI GREEN ATLAS V3
-   ADMIN.JS
+   ADMIN.JS — Full CRUD + Preview
 ===================================== */
 
 let adminPlants = [];
 let pendingPlants = [];
 let heritagePlants = [];
+let editingPlantId = null;
 
 /* =====================================
    AUTH GUARD
@@ -13,41 +14,21 @@ let heritagePlants = [];
 
 async function checkAdminAccess(){
 
-    const user =
-    await getCurrentUser();
+    const { data: sessionData } =
+        await supabaseClient.auth.getSession();
 
-    if(!user){
-
-        window.location.href =
-        "login.html";
-
+    if(!sessionData?.session?.user){
+        window.location.href = "login.html";
         return;
     }
 
-    const profile =
-    await getProfile();
+    const profile = await getProfile();
 
-    if(
-
-        !profile ||
-
-        (
-            profile.role !== "admin"
-
-            &&
-
-            profile.role !== "superadmin"
-        )
-
-    ){
-
-        alert(
-            "Admin access required"
-        );
-
-        window.location.href =
-        "index.html";
-
+    if(!profile ||
+        (profile.role !== "admin" &&
+         profile.role !== "superadmin")){
+        alert("Admin access required");
+        window.location.href = "index.html";
     }
 
 }
@@ -58,38 +39,25 @@ async function checkAdminAccess(){
 
 async function loadAdminPlants(){
 
-    adminPlants =
-    await getAllPlants();
+    showLoader();
 
-    pendingPlants =
-    adminPlants.filter(
+    adminPlants = await getAllPlants();
 
-        plant=>
-
-        plant.verification_status ===
-        "pending"
-
+    pendingPlants = adminPlants.filter(
+        p => p.verification_status === "pending"
     );
 
-    heritagePlants =
-    adminPlants.filter(
-
-        plant=>
-
-        plant.is_heritage ===
-        true
-
+    heritagePlants = adminPlants.filter(
+        p => p.is_heritage === true
     );
 
     updateAdminCounters();
-
-    renderPendingPlants();
-
-    renderVerifiedPlants();
-
+    renderPendingPlants(pendingPlants);
+    renderAllPlantsTable(adminPlants);
     renderHeritageTrees();
-
     renderContributors();
+
+    hideLoader();
 
 }
 
@@ -99,278 +67,229 @@ async function loadAdminPlants(){
 
 function updateAdminCounters(){
 
-    setText(
+    setText("pendingCount", pendingPlants.length);
 
-        "pendingCount",
-
-        pendingPlants.length
-
-    );
-
-    setText(
-
-        "verifiedCount",
-
+    setText("verifiedCount",
         adminPlants.filter(
-
-            p=>
-
-            p.verification_status ===
-            "verified"
-
+            p => p.verification_status === "verified"
         ).length
-
     );
 
-    setText(
+    setText("heritageCountAdmin", heritagePlants.length);
 
-        "heritageCountAdmin",
-
-        heritagePlants.length
-
+    const contributors = new Set(
+        adminPlants
+            .filter(p => p.contributor_name)
+            .map(p => p.contributor_name)
     );
 
-    const contributors =
-    new Set();
+    setText("contributorCountAdmin", contributors.size);
 
-    adminPlants.forEach(
+}
 
-        plant=>{
+/* =====================================
+   HELPER: get display name
+===================================== */
 
-            if(
+function getDisplayName(plant){
+    const s = plant.species || {};
+    return plant.local_name || s.local_name ||
+           plant.english_name || s.english_name ||
+           plant.scientific_name || s.scientific_name ||
+           "Unnamed Plant";
+}
 
-                plant.contributor_name
-
-            ){
-
-                contributors.add(
-
-                    plant.contributor_name
-
-                );
-
-            }
-
-        }
-
-    );
-
-    setText(
-
-        "contributorCountAdmin",
-
-        contributors.size
-
-    );
-
+function getScientificName(plant){
+    const s = plant.species || {};
+    return plant.scientific_name || s.scientific_name || "—";
 }
 
 /* =====================================
    PENDING TABLE
 ===================================== */
 
-function renderPendingPlants(){
+function renderPendingPlants(plants){
 
-    const table =
+    const table = document.getElementById("pendingPlantsTable");
+    if(!table) return;
 
-    document.getElementById(
-        "pendingPlantsTable"
-    );
-
-    if(!table)
+    if(plants.length === 0){
+        table.innerHTML = `
+        <tr>
+            <td colspan="6" class="p-8 text-center text-gray-400">
+                No pending submissions
+            </td>
+        </tr>`;
         return;
+    }
 
-    table.innerHTML = "";
+    table.innerHTML = plants.map(plant => `
+    <tr class="border-b hover:bg-yellow-50 transition">
 
-    pendingPlants.forEach(
+        <td class="p-3">
+            <img
+                src="${plant.cover_photo_url || 'https://placehold.co/80x60/16a34a/white?text=🌿'}"
+                class="w-16 h-12 object-cover rounded-lg">
+        </td>
 
-        plant=>{
+        <td class="p-3">
+            <div class="font-bold text-sm">${getDisplayName(plant)}</div>
+            <div class="italic text-xs text-gray-400">${getScientificName(plant)}</div>
+            <div class="text-xs text-gray-400 mt-1">🔖 ${plant.atlas_number || "—"}</div>
+        </td>
 
-            const species =
-            plant.species || {};
+        <td class="p-3 text-sm">${plant.contributor_name || "—"}</td>
 
-            table.innerHTML +=
+        <td class="p-3 text-xs text-gray-500">
+            ${plant.created_at
+                ? new Date(plant.created_at).toLocaleDateString("en-IN")
+                : "—"}
+        </td>
 
-            `
+        <td class="p-3">
+            <div class="flex flex-wrap gap-2">
 
-            <tr
-            class="border-b">
+                <button
+                    onclick="previewPlant('${plant.id}')"
+                    class="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-200">
+                    👁 Preview
+                </button>
 
-            <td class="p-4">
+                <button
+                    onclick="approvePlantAdmin('${plant.id}')"
+                    class="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-green-700">
+                    ✅ Approve
+                </button>
 
-            ${plant.atlas_number || ""}
+                <button
+                    onclick="markHeritageAdmin('${plant.id}')"
+                    class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-700">
+                    🏛️ Heritage
+                </button>
 
-            </td>
+                <button
+                    onclick="openEditModal('${plant.id}')"
+                    class="bg-yellow-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-yellow-600">
+                    ✏️ Edit
+                </button>
 
-            <td class="p-4">
-
-            ${species.scientific_name || ""}
-
-            </td>
-
-            <td class="p-4">
-
-            ${plant.contributor_name || ""}
-
-            </td>
-
-            <td class="p-4">
-
-            ${plant.panchayat_name || ""}
-
-            </td>
-
-            <td class="p-4">
-
-            <div
-            class="flex gap-2">
-
-            <button
-
-            onclick="approvePlantAdmin('${plant.id}')"
-
-            class="bg-green-700 text-white px-3 py-2 rounded">
-
-            Approve
-
-            </button>
-
-            <button
-
-            onclick="markHeritageAdmin('${plant.id}')"
-
-            class="bg-blue-700 text-white px-3 py-2 rounded">
-
-            Heritage
-
-            </button>
-
-            <button
-
-            onclick="deletePlantAdmin('${plant.id}')"
-
-            class="bg-red-700 text-white px-3 py-2 rounded">
-
-            Delete
-
-            </button>
+                <button
+                    onclick="deletePlantAdmin('${plant.id}')"
+                    class="bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-red-700">
+                    🗑 Delete
+                </button>
 
             </div>
+        </td>
 
-            </td>
-
-            </tr>
-
-            `;
-
-        }
-
-    );
+    </tr>`).join("");
 
 }
 
 /* =====================================
-   VERIFIED GRID
+   ALL PLANTS TABLE
 ===================================== */
 
-function renderVerifiedPlants(){
+function renderAllPlantsTable(plants){
 
-    const grid =
+    const table = document.getElementById("allPlantsTable");
+    if(!table) return;
 
-    document.getElementById(
-        "verifiedPlantsGrid"
-    );
-
-    if(!grid)
+    if(plants.length === 0){
+        table.innerHTML = `
+        <tr>
+            <td colspan="6" class="p-8 text-center text-gray-400">
+                No plants found
+            </td>
+        </tr>`;
         return;
+    }
 
-    grid.innerHTML = "";
+    table.innerHTML = plants.map(plant => {
 
-    adminPlants
+        const statusColor =
+            plant.verification_status === "verified"
+                ? "bg-green-100 text-green-700"
+                : plant.verification_status === "pending"
+                ? "bg-yellow-100 text-yellow-700"
+                : "bg-gray-100 text-gray-700";
 
-    .filter(
+        return `
+        <tr class="border-b hover:bg-gray-50 transition">
 
-        p=>
+            <td class="p-3">
+                <img
+                    src="${plant.cover_photo_url || 'https://placehold.co/80x60/16a34a/white?text=🌿'}"
+                    class="w-16 h-12 object-cover rounded-lg">
+            </td>
 
-        p.verification_status ===
-        "verified"
+            <td class="p-3">
+                <div class="font-bold text-sm">${getDisplayName(plant)}</div>
+                <div class="italic text-xs text-gray-400">${getScientificName(plant)}</div>
+                <div class="text-xs text-gray-400 mt-1">🔖 ${plant.atlas_number || "—"}</div>
+            </td>
 
-    )
+            <td class="p-3 text-sm">${plant.contributor_name || "—"}</td>
 
-    .forEach(
+            <td class="p-3">
+                <span class="text-xs font-bold px-2 py-1 rounded-full ${statusColor}">
+                    ${plant.verification_status || "—"}
+                </span>
+                ${plant.is_heritage
+                    ? `<span class="ml-1 text-xs font-bold px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+                        🏛️ Heritage
+                    </span>`
+                    : ""}
+            </td>
 
-        plant=>{
+            <td class="p-3 text-xs text-gray-400">
+                ${plant.created_at
+                    ? new Date(plant.created_at).toLocaleDateString("en-IN")
+                    : "—"}
+            </td>
 
-            const species =
-            plant.species || {};
+            <td class="p-3">
+                <div class="flex flex-wrap gap-2">
 
-            grid.innerHTML +=
+                    <button
+                        onclick="previewPlant('${plant.id}')"
+                        class="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-200">
+                        👁 Preview
+                    </button>
 
-            `
+                    <button
+                        onclick="openEditModal('${plant.id}')"
+                        class="bg-yellow-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-yellow-600">
+                        ✏️ Edit
+                    </button>
 
-            <div
-            class="bg-slate-50 rounded-2xl overflow-hidden">
+                    ${plant.verification_status !== "verified"
+                        ? `<button
+                            onclick="approvePlantAdmin('${plant.id}')"
+                            class="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-green-700">
+                            ✅ Approve
+                        </button>`
+                        : ""
+                    }
 
-            <img
+                    <button
+                        onclick="generateAdminQR('${plant.id}')"
+                        class="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-purple-700">
+                        QR
+                    </button>
 
-            src="${
-                plant.cover_photo_url ||
+                    <button
+                        onclick="deletePlantAdmin('${plant.id}')"
+                        class="bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-red-700">
+                        🗑
+                    </button>
 
-                'https://placehold.co/600x400?text=Plant'
-            }"
+                </div>
+            </td>
 
-            class="w-full h-48 object-cover">
+        </tr>`;
 
-            <div class="p-4">
-
-            <div
-            class="font-bold">
-
-            ${species.local_name || ""}
-
-            </div>
-
-            <div
-            class="italic text-sm text-gray-600">
-
-            ${species.scientific_name || ""}
-
-            </div>
-
-            <div
-            class="mt-3 flex gap-2">
-
-            <button
-
-            onclick="generateAdminQR('${plant.id}')"
-
-            class="bg-green-700 text-white px-3 py-2 rounded">
-
-            QR
-
-            </button>
-
-            <button
-
-            onclick="markHeritageAdmin('${plant.id}')"
-
-class="bg-blue-700 text-white px-3 py-2 rounded">
-
-Heritage
-
-</button>
-
-</div>
-
-</div>
-
-</div>
-
-`;
-
-        }
-
-    );
+    }).join("");
 
 }
 
@@ -380,73 +299,51 @@ Heritage
 
 function renderHeritageTrees(){
 
-    const grid =
+    const grid = document.getElementById("heritageGridAdmin");
+    if(!grid) return;
 
-    document.getElementById(
-        "heritageGridAdmin"
-    );
-
-    if(!grid)
+    if(heritagePlants.length === 0){
+        grid.innerHTML = `
+        <div class="col-span-3 text-center py-8 text-gray-400">
+            No heritage trees yet
+        </div>`;
         return;
+    }
 
-    grid.innerHTML = "";
+    grid.innerHTML = heritagePlants.map(plant => `
+    <div class="bg-blue-50 rounded-2xl overflow-hidden border border-blue-100">
 
-    heritagePlants.forEach(
-
-        plant=>{
-
-            const species =
-            plant.species || {};
-
-            grid.innerHTML +=
-
-            `
-
-            <div
-            class="bg-blue-50 rounded-2xl overflow-hidden">
-
-            <img
-
-            src="${
-                plant.cover_photo_url ||
-
-                'https://placehold.co/600x400?text=Heritage'
-            }"
-
+        <img
+            src="${plant.cover_photo_url || 'https://placehold.co/600x400/1d4ed8/white?text=🏛️'}"
             class="w-full h-48 object-cover">
 
-            <div class="p-4">
+        <div class="p-4">
 
-            <div
-            class="font-bold">
+            <div class="font-bold">${getDisplayName(plant)}</div>
+            <div class="italic text-sm text-gray-500">${getScientificName(plant)}</div>
+            <div class="text-xs text-gray-400 mt-1">${plant.atlas_number || ""}</div>
 
-            ${species.local_name || ""}
-
+            <div class="mt-3 flex gap-2">
+                <button
+                    onclick="previewPlant('${plant.id}')"
+                    class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-xs font-semibold">
+                    👁 Preview
+                </button>
+                <button
+                    onclick="openEditModal('${plant.id}')"
+                    class="flex-1 bg-yellow-500 text-white py-2 rounded-lg text-xs font-semibold">
+                    ✏️ Edit
+                </button>
+                <button
+                    onclick="deletePlantAdmin('${plant.id}')"
+                    class="bg-red-100 text-red-600 px-3 py-2 rounded-lg text-xs font-semibold">
+                    🗑
+                </button>
             </div>
 
-            <div
-            class="italic text-sm">
+        </div>
 
-            ${species.scientific_name || ""}
-
-            </div>
-
-            <div
-            class="text-xs mt-2">
-
-            ${plant.atlas_number || ""}
-
-            </div>
-
-            </div>
-
-            </div>
-
-            `;
-
-        }
-
-    );
+    </div>`).join("");
 
 }
 
@@ -456,164 +353,303 @@ function renderHeritageTrees(){
 
 function renderContributors(){
 
-    const table =
-
-    document.getElementById(
-        "contributorsTable"
-    );
-
-    if(!table)
-        return;
+    const table = document.getElementById("contributorsTable");
+    if(!table) return;
 
     const stats = {};
 
-    adminPlants.forEach(
+    adminPlants.forEach(plant => {
+        const name = plant.contributor_name || "Anonymous";
+        if(!stats[name]) stats[name] = { total: 0, verified: 0 };
+        stats[name].total++;
+        if(plant.verification_status === "verified")
+            stats[name].verified++;
+    });
 
-        plant=>{
+    const sorted = Object.entries(stats)
+        .sort((a,b) => b[1].total - a[1].total);
 
-            const name =
-
-            plant.contributor_name ||
-
-            "Unknown";
-
-            if(!stats[name]){
-
-                stats[name] = {
-
-                    total:0,
-
-                    verified:0
-
-                };
-
-            }
-
-            stats[name].total++;
-
-            if(
-
-                plant.verification_status ===
-
-                "verified"
-
-            ){
-
-                stats[name].verified++;
-
-            }
-
-        }
-
-    );
-
-    table.innerHTML = "";
-
-    Object.keys(stats)
-
-    .sort(
-
-        (a,b)=>
-
-        stats[b].total -
-
-        stats[a].total
-
-    )
-
-    .forEach(
-
-        contributor=>{
-
-            table.innerHTML +=
-
-            `
-
-            <tr>
-
-            <td class="p-4">
-
-            ${contributor}
-
+    if(sorted.length === 0){
+        table.innerHTML = `
+        <tr>
+            <td colspan="3" class="p-8 text-center text-gray-400">
+                No contributors yet
             </td>
-
-            <td class="p-4">
-
-            ${stats[contributor].total}
-
-            </td>
-
-            <td class="p-4">
-
-            ${stats[contributor].verified}
-
-            </td>
-
-            </tr>
-
-            `;
-
-        }
-
-    );
-
-}
-
-/* =====================================
-   APPROVE
-===================================== */
-
-async function approvePlantAdmin(
-    plantId
-){
-
-    await approvePlant(
-        plantId
-    );
-
-    await loadAdminPlants();
-
-}
-
-/* =====================================
-   HERITAGE
-===================================== */
-
-async function markHeritageAdmin(
-    plantId
-){
-
-    await markHeritage(
-        plantId
-    );
-
-    await loadAdminPlants();
-
-}
-
-/* =====================================
-   DELETE
-===================================== */
-
-async function deletePlantAdmin(
-    plantId
-){
-
-    const ok =
-
-    confirm(
-
-        "Delete this plant?"
-
-    );
-
-    if(!ok)
+        </tr>`;
         return;
+    }
 
-    await deletePlant(
-        plantId
-    );
+    table.innerHTML = sorted.map(([name, data]) => `
+    <tr class="border-b hover:bg-gray-50">
+        <td class="p-4 font-semibold">${name}</td>
+        <td class="p-4">${data.total}</td>
+        <td class="p-4">
+            <span class="bg-green-100 text-green-700 font-bold px-2 py-1 rounded-full text-sm">
+                ${data.verified}
+            </span>
+        </td>
+    </tr>`).join("");
 
+}
+
+/* =====================================
+   PREVIEW MODAL
+===================================== */
+
+async function previewPlant(plantId){
+
+    const plant = adminPlants.find(p => p.id === plantId);
+    if(!plant) return;
+
+    const species = plant.species || {};
+    const name = getDisplayName(plant);
+    const sci = getScientificName(plant);
+
+    // Load photos
+    const photos = await getPlantPhotos(plantId);
+
+    const photosHtml = photos.length > 0
+        ? photos.map(p => `
+            <img
+                src="${p.photo_url}"
+                class="w-full h-48 object-cover rounded-xl cursor-pointer"
+                onclick="window.open('${p.photo_url}','_blank')">`
+        ).join("")
+        : `<p class="text-gray-400 text-sm">No photos uploaded</p>`;
+
+    document.getElementById("previewContent").innerHTML = `
+
+    <div class="space-y-5">
+
+        <!-- Cover -->
+        <img
+            src="${plant.cover_photo_url || 'https://placehold.co/800x400/16a34a/white?text=🌿'}"
+            class="w-full h-64 object-cover rounded-2xl">
+
+        <!-- Name & Status -->
+        <div class="flex flex-wrap items-center gap-3">
+            <h2 class="text-2xl font-black text-green-900">${name}</h2>
+            <span class="text-xs font-bold px-3 py-1 rounded-full
+                ${plant.verification_status === 'verified'
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-yellow-100 text-yellow-700'}">
+                ${plant.verification_status}
+            </span>
+            ${plant.is_heritage
+                ? `<span class="text-xs font-bold px-3 py-1 rounded-full bg-blue-100 text-blue-700">
+                    🏛️ Heritage
+                </span>`
+                : ""}
+        </div>
+
+        <p class="italic text-gray-500">${sci}</p>
+
+        <!-- Details Grid -->
+        <div class="grid grid-cols-2 gap-4 bg-gray-50 rounded-2xl p-4 text-sm">
+            <div>
+                <div class="text-gray-400 text-xs">Local Name</div>
+                <div class="font-semibold">${plant.local_name || species.local_name || "—"}</div>
+            </div>
+            <div>
+                <div class="text-gray-400 text-xs">English Name</div>
+                <div class="font-semibold">${plant.english_name || species.english_name || "—"}</div>
+            </div>
+            <div>
+                <div class="text-gray-400 text-xs">Atlas Number</div>
+                <div class="font-semibold">${plant.atlas_number || "—"}</div>
+            </div>
+            <div>
+                <div class="text-gray-400 text-xs">Contributor</div>
+                <div class="font-semibold">${plant.contributor_name || "—"}</div>
+            </div>
+            <div>
+                <div class="text-gray-400 text-xs">GPS</div>
+                <div class="font-semibold text-xs">
+                    ${plant.latitude ? `${plant.latitude}, ${plant.longitude}` : "—"}
+                </div>
+            </div>
+            <div>
+                <div class="text-gray-400 text-xs">Submitted</div>
+                <div class="font-semibold">
+                    ${plant.created_at
+                        ? new Date(plant.created_at).toLocaleDateString("en-IN")
+                        : "—"}
+                </div>
+            </div>
+        </div>
+
+        <!-- Description -->
+        ${plant.description || species.description
+            ? `<div class="bg-green-50 rounded-2xl p-4 text-sm text-gray-700">
+                <div class="font-bold text-green-800 mb-2">Description</div>
+                ${plant.description || species.description}
+            </div>`
+            : ""}
+
+        <!-- Photos -->
+        <div>
+            <div class="font-bold mb-3">📸 Photos (${photos.length})</div>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                ${photosHtml}
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex flex-wrap gap-3 pt-2">
+
+            ${plant.verification_status !== "verified"
+                ? `<button
+                    onclick="approvePlantAdmin('${plant.id}'); closePreviewModal();"
+                    class="bg-green-600 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-green-700">
+                    ✅ Approve
+                </button>`
+                : ""}
+
+            ${!plant.is_heritage
+                ? `<button
+                    onclick="markHeritageAdmin('${plant.id}'); closePreviewModal();"
+                    class="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-blue-700">
+                    🏛️ Mark Heritage
+                </button>`
+                : ""}
+
+            <button
+                onclick="closePreviewModal(); openEditModal('${plant.id}');"
+                class="bg-yellow-500 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-yellow-600">
+                ✏️ Edit
+            </button>
+
+            <a
+                href="plant.html?id=${plant.id}"
+                target="_blank"
+                class="bg-gray-100 text-gray-700 px-5 py-2.5 rounded-xl font-semibold hover:bg-gray-200">
+                🔗 View Public Page
+            </a>
+
+            <button
+                onclick="deletePlantAdmin('${plant.id}'); closePreviewModal();"
+                class="bg-red-600 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-red-700">
+                🗑 Delete
+            </button>
+
+        </div>
+
+    </div>`;
+
+    document.getElementById("previewModal").classList.remove("hidden");
+
+}
+
+function closePreviewModal(){
+    document.getElementById("previewModal").classList.add("hidden");
+}
+
+/* =====================================
+   EDIT MODAL
+===================================== */
+
+function openEditModal(plantId){
+
+    const plant = adminPlants.find(p => p.id === plantId);
+    if(!plant) return;
+
+    editingPlantId = plantId;
+
+    const species = plant.species || {};
+
+    // Fill form fields
+    setValue("editLocalName",
+        plant.local_name || species.local_name || "");
+    setValue("editEnglishName",
+        plant.english_name || species.english_name || "");
+    setValue("editScientificName",
+        plant.scientific_name || species.scientific_name || "");
+    setValue("editDescription",
+        plant.description || species.description || "");
+    setValue("editContributorName",
+        plant.contributor_name || "");
+    setValue("editVerificationStatus",
+        plant.verification_status || "pending");
+    setValue("editIsHeritage",
+        plant.is_heritage ? "true" : "false");
+    setValue("editLatitude",
+        plant.latitude || "");
+    setValue("editLongitude",
+        plant.longitude || "");
+
+    document.getElementById("editModal").classList.remove("hidden");
+
+}
+
+function closeEditModal(){
+    document.getElementById("editModal").classList.add("hidden");
+    editingPlantId = null;
+}
+
+async function saveEditedPlant(){
+
+    if(!editingPlantId) return;
+
+    const updates = {
+        local_name:            getValue("editLocalName"),
+        english_name:          getValue("editEnglishName"),
+        scientific_name:       getValue("editScientificName"),
+        description:           getValue("editDescription"),
+        contributor_name:      getValue("editContributorName"),
+        verification_status:   getValue("editVerificationStatus"),
+        is_heritage:           getValue("editIsHeritage") === "true",
+        latitude:              parseFloat(getValue("editLatitude")) || null,
+        longitude:             parseFloat(getValue("editLongitude")) || null
+    };
+
+    showLoader();
+
+    const result = await updatePlant(editingPlantId, updates);
+
+    hideLoader();
+
+    if(result){
+        showAdminNotification("Plant updated successfully!", "success");
+        closeEditModal();
+        await loadAdminPlants();
+    } else {
+        showAdminNotification("Update failed. Please try again.", "error");
+    }
+
+}
+
+/* =====================================
+   APPROVE / HERITAGE / DELETE
+===================================== */
+
+async function approvePlantAdmin(plantId){
+    showLoader();
+    await approvePlant(plantId);
+    hideLoader();
+    showAdminNotification("Plant approved!", "success");
+    await loadAdminPlants();
+}
+
+async function markHeritageAdmin(plantId){
+    showLoader();
+    await markHeritage(plantId);
+    hideLoader();
+    showAdminNotification("Marked as Heritage Tree!", "success");
+    await loadAdminPlants();
+}
+
+async function deletePlantAdmin(plantId){
+
+    const plant = adminPlants.find(p => p.id === plantId);
+    const name = plant ? getDisplayName(plant) : "this plant";
+
+    const ok = confirm(`Delete "${name}"?\n\nThis cannot be undone.`);
+    if(!ok) return;
+
+    showLoader();
+    await deletePlant(plantId);
+    hideLoader();
+    showAdminNotification("Plant deleted.", "success");
     await loadAdminPlants();
 
 }
@@ -622,194 +658,145 @@ async function deletePlantAdmin(
    QR GENERATION
 ===================================== */
 
-function generateAdminQR(
-    plantId
-){
+function generateAdminQR(plantId){
 
-    const modal =
-
-    document.getElementById(
-        "qrAdminModal"
-    );
-
-    const container =
-
-    document.getElementById(
-        "adminQrContainer"
-    );
-
-    if(
-
-        !modal ||
-
-        !container
-
-    ){
-
-        return;
-
-    }
+    const modal = document.getElementById("qrAdminModal");
+    const container = document.getElementById("adminQrContainer");
+    if(!modal || !container) return;
 
     container.innerHTML = "";
 
-    const url =
+    const url = `${window.location.origin}/plant.html?id=${plantId}`;
 
-    `${window.location.origin}/plant.html?id=${plantId}`;
+    new QRCode(container, {
+        text: url,
+        width: 250,
+        height: 250,
+        colorDark: "#14532d",
+        colorLight: "#ffffff"
+    });
 
-    new QRCode(
-
-        container,
-
-        {
-
-            text:url,
-
-            width:250,
-
-            height:250
-
-        }
-
-    );
-
-    modal.classList.remove(
-        "hidden"
-    );
+    modal.classList.remove("hidden");
 
 }
 
 /* =====================================
-   CLOSE QR
+   SEARCH & FILTER
 ===================================== */
 
-function initQRModal(){
+function applyAdminSearch(){
 
-    document
+    const search = (getValue("adminSearch") || "").toLowerCase();
+    const statusFilter = getValue("adminStatusFilter") || "";
 
-    .getElementById(
-        "closeAdminQR"
-    )
+    const filtered = adminPlants.filter(plant => {
 
-    ?.addEventListener(
+        const species = plant.species || {};
 
-        "click",
+        const text = [
+            plant.atlas_number || "",
+            plant.local_name || "",
+            plant.english_name || "",
+            plant.scientific_name || "",
+            species.local_name || "",
+            species.scientific_name || "",
+            plant.contributor_name || ""
+        ].join(" ").toLowerCase();
 
-        ()=>{
+        const matchSearch = !search || text.includes(search);
+        const matchStatus = !statusFilter ||
+            plant.verification_status === statusFilter;
 
-            document
+        return matchSearch && matchStatus;
 
-            .getElementById(
-                "qrAdminModal"
-            )
+    });
 
-            .classList.add(
-                "hidden"
-            );
+    renderAllPlantsTable(filtered);
 
-        }
-
+    const pending = filtered.filter(
+        p => p.verification_status === "pending"
     );
+    renderPendingPlants(pending);
 
 }
 
 /* =====================================
-   SEARCH
+   NOTIFICATION
 ===================================== */
 
-function initSearch(){
+function showAdminNotification(message, type="success"){
 
-    document
+    const existing = document.getElementById("adminNotif");
+    if(existing) existing.remove();
 
-    .getElementById(
-        "adminSearchBtn"
-    )
+    const div = document.createElement("div");
+    div.id = "adminNotif";
 
-    ?.addEventListener(
+    const color = type === "success"
+        ? "bg-green-600"
+        : type === "error"
+        ? "bg-red-600"
+        : "bg-yellow-600";
 
-        "click",
+    div.className =
+        `fixed top-5 right-5 z-[99999] text-white px-5 py-3 rounded-xl shadow-xl ${color}`;
 
-        ()=>{
+    div.textContent = message;
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 3000);
 
-            const search =
+}
 
-            document
+/* =====================================
+   LOADER
+===================================== */
 
-            .getElementById(
-                "adminSearch"
-            )
+function showLoader(){
+    if(document.getElementById("adminLoader")) return;
+    const d = document.createElement("div");
+    d.id = "adminLoader";
+    d.className =
+        "fixed inset-0 bg-black/30 z-[99998] flex items-center justify-center";
+    d.innerHTML = `
+    <div class="bg-white rounded-2xl p-6 text-center shadow-xl">
+        <div class="animate-spin text-4xl">🌿</div>
+        <div class="mt-2 font-semibold text-gray-700">Loading...</div>
+    </div>`;
+    document.body.appendChild(d);
+}
 
-            .value
-
-            .toLowerCase();
-
-            const filtered =
-
-            adminPlants.filter(
-
-                plant=>{
-
-                    const species =
-
-                    plant.species || {};
-
-                    const text =
-
-                    `
-                    ${plant.atlas_number || ""}
-                    ${species.local_name || ""}
-                    ${species.scientific_name || ""}
-                    ${plant.contributor_name || ""}
-                    `
-                    .toLowerCase();
-
-                    return text.includes(
-                        search
-                    );
-
-                }
-
-            );
-
-            console.log(
-                filtered
-            );
-
-            alert(
-
-                filtered.length +
-
-                " plants found"
-
-            );
-
-        }
-
-    );
-
+function hideLoader(){
+    document.getElementById("adminLoader")?.remove();
 }
 
 /* =====================================
    HELPERS
 ===================================== */
 
-function setText(
-    id,
-    value
-){
+function setText(id, value){
+    const el = document.getElementById(id);
+    if(el) el.textContent = value;
+}
 
-    const el =
+function getValue(id){
+    const el = document.getElementById(id);
+    return el ? el.value : "";
+}
 
-    document.getElementById(
-        id
-    );
+function setValue(id, value){
+    const el = document.getElementById(id);
+    if(el) el.value = value;
+}
 
-    if(el){
-
-        el.textContent =
-        value;
-
-    }
-
+async function getPlantPhotos(plantId){
+    const { data, error } =
+        await supabaseClient
+        .from("plant_photos")
+        .select("*")
+        .eq("plant_id", plantId)
+        .order("created_at", { ascending: true });
+    if(error) return [];
+    return data || [];
 }
 
 /* =====================================
@@ -817,60 +804,66 @@ function setText(
 ===================================== */
 
 async function logoutAdmin(){
-
     await supabaseClient.auth.signOut();
-
-    window.location.href =
-    "index.html";
-
+    window.location.href = "index.html";
 }
 
 /* =====================================
    INIT
 ===================================== */
 
-document.addEventListener(
+document.addEventListener("DOMContentLoaded", async () => {
 
-    "DOMContentLoaded",
+    await checkAdminAccess();
+    await loadAdminPlants();
 
-    async ()=>{
+    // QR modal close
+    document.getElementById("closeAdminQR")
+        ?.addEventListener("click", () => {
+            document.getElementById("qrAdminModal")
+                .classList.add("hidden");
+        });
 
-        await checkAdminAccess();
+    // Preview modal close
+    document.getElementById("closePreviewModal")
+        ?.addEventListener("click", closePreviewModal);
 
-        await loadAdminPlants();
+    document.getElementById("previewModal")
+        ?.addEventListener("click", function(e){
+            if(e.target === this) closePreviewModal();
+        });
 
-        initQRModal();
+    // Edit modal close
+    document.getElementById("closeEditModal")
+        ?.addEventListener("click", closeEditModal);
 
-        initSearch();
+    document.getElementById("editModal")
+        ?.addEventListener("click", function(e){
+            if(e.target === this) closeEditModal();
+        });
 
-        document
+    // Save edit
+    document.getElementById("saveEditBtn")
+        ?.addEventListener("click", saveEditedPlant);
 
-        .getElementById(
-            "logoutBtn"
-        )
+    // Search
+    document.getElementById("adminSearchBtn")
+        ?.addEventListener("click", applyAdminSearch);
 
-        ?.addEventListener(
+    document.getElementById("adminSearch")
+        ?.addEventListener("keydown", e => {
+            if(e.key === "Enter") applyAdminSearch();
+        });
 
-            "click",
+    document.getElementById("adminStatusFilter")
+        ?.addEventListener("change", applyAdminSearch);
 
-            logoutAdmin
+    // Refresh
+    document.getElementById("refreshAdminBtn")
+        ?.addEventListener("click", loadAdminPlants);
 
-        );
+    // Logout
+    document.getElementById("logoutBtn")
+        ?.addEventListener("click", logoutAdmin);
 
-        document
-
-        .getElementById(
-            "refreshAdminBtn"
-        )
-
-        ?.addEventListener(
-
-            "click",
-
-            loadAdminPlants
-
-        );
-
-    }
-
-);
+});
