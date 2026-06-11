@@ -150,24 +150,27 @@ async function findOrCreateSpecies({
 
 }){
 
-    let species =
-    await findSpecies(
-        scientific_name
-    );
+    // Use local_name or english_name as fallback
+    // if scientific_name is blank
+    const sci = (scientific_name || "").trim()
+        || (local_name || "").trim()
+        || (english_name || "").trim()
+        || "Unknown";
+
+    let species = await findSpecies(sci);
 
     if(species)
         return species;
 
-    species =
-    await createSpecies({
+    species = await createSpecies({
 
-        scientific_name,
+        scientific_name: sci,
 
-        english_name,
+        english_name: english_name || "",
 
-        local_name,
+        local_name: local_name || "",
 
-        description
+        description: description || ""
 
     });
 
