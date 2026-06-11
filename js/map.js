@@ -1437,6 +1437,10 @@ function createAddPlantModal(){
 id="contributorAssociation"
 placeholder="Association / School / Eco Club / Organization"
 class="border p-3 rounded-xl">
+<input
+id="contributorPhone"
+placeholder="Mobile Number"
+class="border p-3 rounded-xl">
 
     </div>
 
@@ -1705,17 +1709,15 @@ async function submitPlantForm(e){
             "contributorName"
         ).value;
 
-        const schoolName =
+       const contributorAssociation =
+document.getElementById(
+    "contributorAssociation"
+).value;
 
-        document.getElementById(
-            "schoolName"
-        ).value;
-
-        const organizationName =
-
-        document.getElementById(
-            "organizationName"
-        ).value;
+const contributorPhone =
+document.getElementById(
+    "contributorPhone"
+).value;
 
         const description =
 
@@ -1728,14 +1730,13 @@ async function submitPlantForm(e){
         document.getElementById(
             "plantPanchayat"
         ).value;
-
-        if(
-
-            !scientificName ||
-
-            !longPressLatLng
-
-        ){
+       
+if(
+    !scientificName ||
+    !contributorName ||
+    !contributorAssociation ||
+    !longPressLatLng
+){
 
             alert(
                 "Scientific name is required"
@@ -1770,11 +1771,11 @@ async function submitPlantForm(e){
             contributor_name:
             contributorName,
 
-            school_name:
-            schoolName,
+contributor_association:
+contributorAssociation,
 
-            organization_name:
-            organizationName,
+contributor_phone:
+contributorPhone,
 
             panchayat_id:
             panchayatId,
