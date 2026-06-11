@@ -1,119 +1,68 @@
 /* =====================================
    AMAI GREEN ATLAS V3
-   MAP.JS
-   PART 7A - CORE MAP ENGINE
+   MAP.JS — Filters + Search + Stats + QR
+===================================== */
+
+/* =====================================
+   STATE
 ===================================== */
 
 let map;
-
-let markerCluster;
-
-let allMarkers = [];
-
-let verifiedPlants = [];
-
-let currentUserMarker = null;
-
-let longPressTimer = null;
-
-let longPressLatLng = null;
+let allPlants = [];
+let filteredPlants = [];
+let markerClusterGroup;
+let markers = [];
+let qrPlantId = null;
 
 /* =====================================
-   CHENGANNUR CENTER
+   ICON FACTORY
 ===================================== */
 
-const CHENGANNUR_CENTER = [
+function getPlantIcon(plant){
 
-    9.3164,
-    76.6133
+    const isHeritage = plant.is_heritage;
 
-];
+    const plantType =
+        plant.plant_types?.icon || "🌿";
 
-/* =====================================
-   ICONS
-===================================== */
+    const color = isHeritage
+        ? "#1d4ed8"
+        : "#16a34a";
 
-const verifiedIcon = L.divIcon({
+    const emoji = isHeritage
+        ? "🏛️"
+        : plantType;
 
-    html: `
-    <div style="
-    font-size:28px;
-    ">
-    🌳
-    </div>
-    `,
+    return L.divIcon({
 
-    className: "",
+        className: "",
 
-    iconSize:[30,30]
+        html: `
+        <div style="
+            background:${color};
+            color:white;
+            width:38px;
+            height:38px;
+            border-radius:50% 50% 50% 0;
+            transform:rotate(-45deg);
+            border:3px solid white;
+            box-shadow:0 2px 8px rgba(0,0,0,.35);
+            display:flex;
+            align-items:center;
+            justify-content:center;
+        ">
+            <span style="transform:rotate(45deg);font-size:16px;">
+                ${emoji}
+            </span>
+        </div>`,
 
-});
+        iconSize: [38, 38],
+        iconAnchor: [19, 38],
+        popupAnchor: [0, -40]
 
-const heritageIcon = L.divIcon({
+    });
 
-    html: `
-    <div style="
-    font-size:28px;
-    ">
-    🏛️
-    </div>
-    `,
-
-    className: "",
-
-    iconSize:[30,30]
-
-});
-
-const treeIcon = L.divIcon({
-
-    html:"🌳",
-
-    className:"",
-
-    iconSize:[30,30]
-
-});
-
-const herbIcon = L.divIcon({
-
-    html:"🌿",
-
-    className:"",
-
-    iconSize:[30,30]
-
-});
-
-const rareIcon = L.divIcon({
-
-    html:"🌺",
-
-    className:"",
-
-    iconSize:[30,30]
-
-});
-
-const fruitIcon = L.divIcon({
-
-    html:"🥭",
-
-    className:"",
-
-    iconSize:[30,30]
-
-});
-
-const palmIcon = L.divIcon({
-
-    html:"🌴",
-
-    className:"",
-
-    iconSize:[30,30]
-
-});
+}
 
 /* =====================================
    INIT MAP
@@ -121,63 +70,412 @@ const palmIcon = L.divIcon({
 
 function initMap(){
 
-    map = L.map(
-
-        "map",
-
-        {
-
-            zoomControl:true
-
-        }
-
-    )
-
-    .setView(
-
-        CHENGANNUR_CENTER,
-
-        12
-
-    );
+    map = L.map("map", {
+        center: [9.3165, 76.6166],
+        zoom: 12,
+        zoomControl: true
+    });
 
     L.tileLayer(
-
         "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-
         {
-
-            maxZoom:20,
-
             attribution:
+                '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
+            maxZoom: 19
+        }
+    ).addTo(map);
 
-            "&copy; OpenStreetMap"
+    markerClusterGroup = L.markerClusterGroup({
+
+        maxClusterRadius: 60,
+
+        iconCreateFunction: function(cluster){
+
+            const count = cluster.getChildCount();
+
+            const size = count > 50
+                ? 55
+                : count > 20
+                ? 45
+                : 36;
+
+            return L.divIcon({
+
+                html: `<div style="
+                    background:#16a34a;
+                    color:white;
+                    width:${size}px;
+                    height:${size}px;
+                    border-radius:50%;
+                    border:3px solid white;
+                    box-shadow:0 2px 8px rgba(0,0,0,.3);
+                    display:flex;
+                    align-items:center;
+                    justify-content:center;
+                    font-weight:800;
+                    font-size:${size > 45 ? 16 : 13}px;
+                ">${count}</div>`,
+
+                className: "",
+                iconSize: [size, size]
+
+            });
 
         }
-
-    )
-
-    .addTo(map);
-
-    markerCluster =
-
-    L.markerClusterGroup({
-
-        spiderfyOnMaxZoom:true,
-
-        showCoverageOnHover:false,
-
-        zoomToBoundsOnClick:true
 
     });
 
-    map.addLayer(
+    map.addLayer(markerClusterGroup);
 
-        markerCluster
+}
 
-    );
+/* =====================================
+   LOAD PLANTS
+===================================== */
 
-    initLongPress();
+async function loadMapPlants(){
+
+    try{
+
+        const { data, error } =
+            await supabaseClient
+            .from("plants")
+            .select(`
+                *,
+                species(*),
+                panchayats(id, name),
+                plant_types(id, name, icon)
+            `)
+            .eq("verification_status", "verified")
+            .not("latitude", "is", null)
+            .not("longitude", "is", null);
+
+        if(error){
+            console.error("Map load error:", error);
+            return;
+        }
+
+        allPlants = data || [];
+        filteredPlants = [...allPlants];
+
+        renderMarkers(filteredPlants);
+        updateMapStats(filteredPlants);
+        populateFilters();
+        loadDashboardStats();
+        loadRecentContributions();
+        loadHeritageSection();
+        loadLeaderboard();
+
+    } catch(err){
+        console.error("loadMapPlants error:", err);
+    }
+
+}
+
+/* =====================================
+   RENDER MARKERS
+===================================== */
+
+function renderMarkers(plants){
+
+    markerClusterGroup.clearLayers();
+    markers = [];
+
+    plants.forEach(plant => {
+
+        const lat = parseFloat(plant.latitude);
+        const lng = parseFloat(plant.longitude);
+
+        if(isNaN(lat) || isNaN(lng)) return;
+
+        const species = plant.species || {};
+        const panchayat = plant.panchayats || {};
+
+        // Use plants columns first, fall back to species
+        const displayName =
+            plant.local_name ||
+            species.local_name ||
+            plant.english_name ||
+            species.english_name ||
+            species.scientific_name ||
+            "Plant";
+
+        const sciName =
+            plant.scientific_name ||
+            species.scientific_name || "";
+
+        const marker = L.marker(
+            [lat, lng],
+            { icon: getPlantIcon(plant) }
+        );
+
+        const popupHtml = `
+        <div style="
+            font-family:Inter,sans-serif;
+            min-width:220px;
+            max-width:280px;
+        ">
+            <img
+                src="${plant.cover_photo_url || 'https://placehold.co/400x200/16a34a/white?text=🌿'}"
+                style="width:100%;height:140px;object-fit:cover;border-radius:10px;margin-bottom:10px;">
+
+            <div style="font-weight:800;font-size:15px;color:#14532d;">
+                ${displayName}
+            </div>
+
+            <div style="font-style:italic;font-size:12px;color:#6b7280;margin-top:2px;">
+                ${sciName}
+            </div>
+
+            ${plant.is_heritage
+                ? `<div style="
+                    display:inline-block;
+                    background:#dbeafe;
+                    color:#1d4ed8;
+                    padding:2px 10px;
+                    border-radius:999px;
+                    font-size:11px;
+                    font-weight:700;
+                    margin-top:6px;
+                ">🏛️ Heritage Tree</div>`
+                : ""
+            }
+
+            <div style="
+                margin-top:8px;
+                font-size:12px;
+                color:#6b7280;
+                display:flex;
+                flex-direction:column;
+                gap:2px;
+            ">
+                <span>📍 ${panchayat.name || ""}</span>
+                <span>🔖 Atlas: ${plant.atlas_number || "—"}</span>
+                <span>👤 ${plant.contributor_name || "—"}</span>
+            </div>
+
+            <div style="margin-top:12px;display:flex;gap:8px;">
+                <a
+                    href="plant.html?id=${plant.id}"
+                    style="
+                        flex:1;
+                        background:#16a34a;
+                        color:white;
+                        text-align:center;
+                        padding:8px;
+                        border-radius:8px;
+                        font-size:12px;
+                        font-weight:700;
+                        text-decoration:none;
+                    ">
+                    View Details
+                </a>
+                <button
+                    onclick="showQRFromMap('${plant.id}')"
+                    style="
+                        background:#1d4ed8;
+                        color:white;
+                        border:none;
+                        padding:8px 12px;
+                        border-radius:8px;
+                        font-size:12px;
+                        font-weight:700;
+                        cursor:pointer;
+                    ">
+                    QR
+                </button>
+            </div>
+        </div>`;
+
+        marker.bindPopup(popupHtml, {
+            maxWidth: 300,
+            className: "atlas-popup"
+        });
+
+        marker._plantData = plant;
+        markers.push(marker);
+        markerClusterGroup.addLayer(marker);
+
+    });
+
+    updateMapStats(plants);
+
+}
+
+/* =====================================
+   UPDATE MAP STATS
+===================================== */
+
+function updateMapStats(plants){
+
+    const speciesSet = new Set();
+    const panchayatSet = new Set();
+    let heritageCount = 0;
+
+    plants.forEach(p => {
+        if(p.species?.id) speciesSet.add(p.species.id);
+        if(p.panchayats?.id) panchayatSet.add(p.panchayats.id);
+        if(p.is_heritage) heritageCount++;
+    });
+
+    setText("visiblePlantCount", plants.length);
+    setText("visibleSpeciesCount", speciesSet.size);
+    setText("visiblePanchayatCount", panchayatSet.size);
+    setText("visibleHeritageCount", heritageCount);
+
+}
+
+/* =====================================
+   POPULATE FILTER DROPDOWNS
+===================================== */
+
+function populateFilters(){
+
+    // Panchayats
+    const panchayatSel =
+        document.getElementById("panchayatFilter");
+
+    if(panchayatSel){
+
+        const panchayatMap = new Map();
+
+        allPlants.forEach(p => {
+            if(p.panchayats?.id){
+                panchayatMap.set(
+                    p.panchayats.id,
+                    p.panchayats.name
+                );
+            }
+        });
+
+        panchayatMap.forEach((name, id) => {
+            const opt = document.createElement("option");
+            opt.value = id;
+            opt.textContent = name;
+            panchayatSel.appendChild(opt);
+        });
+
+    }
+
+    // Species
+    const speciesSel =
+        document.getElementById("speciesFilter");
+
+    if(speciesSel){
+
+        const speciesMap = new Map();
+
+        allPlants.forEach(p => {
+            if(p.species?.id){
+                speciesMap.set(
+                    p.species.id,
+                    p.species.local_name ||
+                    p.species.english_name ||
+                    p.species.scientific_name
+                );
+            }
+        });
+
+        // Sort alphabetically
+        const sorted = [...speciesMap.entries()]
+            .sort((a,b) => a[1].localeCompare(b[1]));
+
+        sorted.forEach(([id, name]) => {
+            const opt = document.createElement("option");
+            opt.value = id;
+            opt.textContent = name;
+            speciesSel.appendChild(opt);
+        });
+
+    }
+
+}
+
+/* =====================================
+   APPLY FILTERS
+===================================== */
+
+function applyFilters(){
+
+    const searchVal =
+        (document.getElementById("searchInput")?.value || "")
+        .toLowerCase().trim();
+
+    const panchayatVal =
+        document.getElementById("panchayatFilter")?.value || "";
+
+    const speciesVal =
+        document.getElementById("speciesFilter")?.value || "";
+
+    const heritageVal =
+        document.getElementById("heritageFilter")?.value || "";
+
+    filteredPlants = allPlants.filter(plant => {
+
+        const species = plant.species || {};
+        const panchayat = plant.panchayats || {};
+
+        // Search text
+        if(searchVal){
+            const haystack = [
+                plant.atlas_number || "",
+                species.local_name || "",
+                species.english_name || "",
+                species.scientific_name || "",
+                plant.contributor_name || "",
+                panchayat.name || ""
+            ].join(" ").toLowerCase();
+
+            if(!haystack.includes(searchVal)) return false;
+        }
+
+        // Panchayat filter
+        if(panchayatVal && panchayat.id !== panchayatVal)
+            return false;
+
+        // Species filter
+        if(speciesVal && species.id !== speciesVal)
+            return false;
+
+        // Heritage filter
+        if(heritageVal === "heritage" && !plant.is_heritage)
+            return false;
+
+        return true;
+
+    });
+
+    renderMarkers(filteredPlants);
+
+    // Fit bounds if results found
+    if(filteredPlants.length > 0 && markers.length > 0){
+        const group = L.featureGroup(markers);
+        map.fitBounds(group.getBounds().pad(0.1));
+    }
+
+}
+
+/* =====================================
+   RESET FILTERS
+===================================== */
+
+function resetFilters(){
+
+    const ids = [
+        "searchInput",
+        "panchayatFilter",
+        "speciesFilter",
+        "heritageFilter"
+    ];
+
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.value = "";
+    });
+
+    filteredPlants = [...allPlants];
+    renderMarkers(filteredPlants);
+    map.setView([9.3165, 76.6166], 12);
 
 }
 
@@ -187,88 +485,32 @@ function initMap(){
 
 function locateMe(){
 
-    if(
-
-        !navigator.geolocation
-
-    ){
-
-        alert(
-
-            "Geolocation not supported"
-
-        );
-
+    if(!navigator.geolocation){
+        showNotification("Geolocation not supported", "error");
         return;
-
     }
 
     navigator.geolocation.getCurrentPosition(
 
-        function(position){
-
-            const lat =
-
-            position.coords.latitude;
-
-            const lng =
-
-            position.coords.longitude;
-
+        pos => {
             map.setView(
-
-                [lat,lng],
-
-                17
-
+                [pos.coords.latitude, pos.coords.longitude],
+                15
             );
 
-            if(
-
-                currentUserMarker
-
-            ){
-
-                map.removeLayer(
-
-                    currentUserMarker
-
-                );
-
-            }
-
-            currentUserMarker =
-
-            L.marker(
-
-                [lat,lng]
-
-            )
-
-            .addTo(map)
-
-            .bindPopup(
-
-                "📍 You are here"
-
-            );
-
+            L.circle(
+                [pos.coords.latitude, pos.coords.longitude],
+                {
+                    radius: 100,
+                    color: "#16a34a",
+                    fillColor: "#bbf7d0",
+                    fillOpacity: 0.5
+                }
+            ).addTo(map);
         },
 
-        function(){
-
-            alert(
-
-                "Unable to get location"
-
-            );
-
-        },
-
-        {
-
-            enableHighAccuracy:true
-
+        err => {
+            showNotification("Could not get location", "warning");
         }
 
     );
@@ -276,767 +518,70 @@ function locateMe(){
 }
 
 /* =====================================
-   LONG PRESS SUPPORT
+   DASHBOARD STATS (hero + statistics)
 ===================================== */
 
-function initLongPress(){
-
-    map.on(
-
-        "mousedown",
-
-        startLongPress
-
-    );
-
-    map.on(
-
-        "mouseup",
-
-        cancelLongPress
-
-    );
-
-    map.on(
-
-        "touchstart",
-
-        startLongPress
-
-    );
-
-    map.on(
-
-        "touchend",
-
-        cancelLongPress
-
-    );
-
-    map.on(
-
-        "contextmenu",
-
-        function(e){
-
-            showPlantTypeMenu(
-
-                e.latlng
-
-            );
-
-        }
-
-    );
-
-}
-
-function startLongPress(e){
-
-    longPressLatLng =
-
-    e.latlng;
-
-    longPressTimer =
-
-    setTimeout(
-
-        function(){
-
-            showPlantTypeMenu(
-
-                longPressLatLng
-
-            );
-
-        },
-
-        700
-
-    );
-
-}
-
-function cancelLongPress(){
-
-    clearTimeout(
-
-        longPressTimer
-
-    );
-
-}
-
-/* =====================================
-   LONG PRESS MENU
-===================================== */
-
-function showPlantTypeMenu(
-
-    latlng
-
-){
-
-    longPressLatLng =
-
-    latlng;
-
-    let menu =
-
-    document.getElementById(
-
-        "longPressMenu"
-
-    );
-
-    if(!menu){
-
-        createLongPressMenu();
-
-        menu =
-
-        document.getElementById(
-
-            "longPressMenu"
-
-        );
-
-    }
-
-    menu.style.display =
-
-    "block";
-
-    menu.style.left =
-
-    "20px";
-
-    menu.style.bottom =
-
-    "20px";
-
-}
-
-function createLongPressMenu(){
-
-    const menu =
-
-    document.createElement(
-
-        "div"
-
-    );
-
-    menu.id =
-
-    "longPressMenu";
-
-    menu.innerHTML = `
-
-    <div class="font-bold mb-2">
-
-    Add Plant
-
-    </div>
-
-    <div
-    class="longpress-option"
-    onclick="selectPlantType('tree')">
-
-    🌳 Tree
-
-    </div>
-
-    <div
-    class="longpress-option"
-    onclick="selectPlantType('herb')">
-
-    🌿 Medicinal Herb
-
-    </div>
-
-    <div
-    class="longpress-option"
-    onclick="selectPlantType('rare')">
-
-    🌺 Rare Plant
-
-    </div>
-
-    <div
-    class="longpress-option"
-    onclick="selectPlantType('fruit')">
-
-    🥭 Fruit Tree
-
-    </div>
-
-    <div
-    class="longpress-option"
-    onclick="selectPlantType('palm')">
-
-    🌴 Palm
-
-    </div>
-
-    `;
-
-    document.body.appendChild(
-
-        menu
-
-    );
-
-}
-
-function selectPlantType(
-
-    type
-
-){
-
-    const menu =
-
-    document.getElementById(
-
-        "longPressMenu"
-
-    );
-
-    if(menu){
-
-        menu.style.display =
-
-        "none";
-
-    }
-
-    openAddPlantForm(
-
-        type,
-
-        longPressLatLng
-
-    );
-
-}
-
-/* =====================================
-   PLACEHOLDER
-   ADD PLANT FORM
-===================================== */
-
-function openAddPlantForm(
-
-    plantType,
-
-    latlng
-
-){
-
-    console.log(
-
-        "Plant Type:",
-
-        plantType
-
-    );
-
-    console.log(
-
-        "Location:",
-
-        latlng.lat,
-
-        latlng.lng
-
-    );
-
-    alert(
-
-        "Add Plant Form coming in Part 7C"
-    );
-
-}
-
-/* =====================================
-   HELPERS
-===================================== */
-
-function clearMarkers(){
-
-    markerCluster.clearLayers();
-
-    allMarkers = [];
-
-}
-
-function refreshMap(){
-
-    if(
-
-        typeof loadVerifiedPlants ===
-
-        "function"
-
-    ){
-
-        loadVerifiedPlants();
-
-    }
-
-}
-
-/* =====================================
-   INIT
-===================================== */
-
-document.addEventListener(
-
-    "DOMContentLoaded",
-
-    function(){
-
-        if(
-
-            document.getElementById(
-
-                "map"
-
-            )
-
-        ){
-
-            initMap();
-
-        }
-
-        const locateBtn =
-
-        document.getElementById(
-
-            "locateMeBtn"
-
-        );
-
-        if(locateBtn){
-
-            locateBtn.addEventListener(
-
-                "click",
-
-                locateMe
-
-            );
-
-        }
-
-        const refreshBtn =
-
-        document.getElementById(
-
-            "refreshMapBtn"
-
-        );
-
-        if(refreshBtn){
-
-            refreshBtn.addEventListener(
-
-                "click",
-
-                refreshMap
-
-            );
-
-        }
-
-    }
-
-);
-/* =====================================
-   PART 7B
-   LOAD PLANTS + MARKERS
-===================================== */
-
-/* =====================================
-   LOAD VERIFIED PLANTS
-===================================== */
-
-async function loadVerifiedPlants(){
+async function loadDashboardStats(){
 
     try{
 
-        clearMarkers();
+        const stats = await getDashboardStats();
 
-        verifiedPlants =
-        await getVerifiedPlants();
+        // Hero section
+        setText("heroTreeCount",        stats.plantCount);
+        setText("heroSpeciesCount",     stats.speciesCount);
+        setText("heroHeritageCount",    stats.heritageCount);
+        setText("heroContributorCount", stats.contributorCount);
 
-        const heritageTrees =
-        await getHeritageTrees();
+        // Statistics section
+        setText("totalPlantsCount", stats.plantCount);
+        setText("speciesCount",     stats.speciesCount);
+        setText("heritageCount",    stats.heritageCount);
+        setText("contributorsCount",stats.contributorCount);
 
-        const heritageIds =
-        new Set(
-            heritageTrees.map(
-                tree => tree.id
-            )
-        );
+        // Animate counters
+        animateCounters();
 
-        verifiedPlants.forEach(
-
-            plant => {
-
-                const isHeritage =
-                heritageIds.has(
-                    plant.id
-                );
-
-                addPlantMarker(
-
-                    plant,
-
-                    isHeritage
-
-                );
-
-            }
-
-        );
-
-        updateMapStatistics();
-
-    }
-
-    catch(error){
-
-        console.error(
-            error
-        );
-
+    } catch(err){
+        console.error("Stats error:", err);
     }
 
 }
 
 /* =====================================
-   ADD MARKER
+   ANIMATE COUNTERS
 ===================================== */
 
-function addPlantMarker(
+function animateCounters(){
 
-    plant,
+    const counterIds = [
+        "heroTreeCount",
+        "heroSpeciesCount",
+        "heroHeritageCount",
+        "heroContributorCount",
+        "totalPlantsCount",
+        "speciesCount",
+        "heritageCount",
+        "contributorsCount"
+    ];
 
-    isHeritage = false
+    counterIds.forEach(id => {
 
-){
+        const el = document.getElementById(id);
+        if(!el) return;
 
-    const lat =
-    parseFloat(
-        plant.latitude
-    );
+        const target = parseInt(el.textContent) || 0;
+        if(target === 0) return;
 
-    const lng =
-    parseFloat(
-        plant.longitude
-    );
-
-    if(
-
-        isNaN(lat)
-
-        ||
-
-        isNaN(lng)
-
-    ){
-
-        return;
-
-    }
-
-    const marker =
-
-    L.marker(
-
-        [lat,lng],
-
-        {
-
-            icon:
-
-            isHeritage
-
-            ?
-
-            heritageIcon
-
-            :
-
-            verifiedIcon
-
-        }
-
-    );
-
-    marker.bindPopup(
-
-        buildPopupHTML(
-
-            plant,
-
-            isHeritage
-
-        ),
-
-        {
-
-            maxWidth:320
-
-        }
-
-    );
-
-    marker.on(
-
-        "click",
-
-        ()=>{
-
-            openPlantModal(
-                plant
-            );
-
-        }
-
-    );
-
-    markerCluster.addLayer(
-        marker
-    );
-
-    allMarkers.push({
-
-        marker,
-        plant
+        let current = 0;
+        const step = Math.ceil(target / 40);
+        const interval = setInterval(() => {
+            current = Math.min(current + step, target);
+            el.textContent = current;
+            if(current >= target) clearInterval(interval);
+        }, 30);
 
     });
-
-}
-
-/* =====================================
-   POPUP HTML
-===================================== */
-
-function buildPopupHTML(
-
-    plant,
-
-    isHeritage
-
-){
-
-    const species =
-
-    plant.species || {};
-
-    const photo =
-
-    plant.cover_photo_url ||
-
-    "https://placehold.co/600x400?text=Plant";
-
-    return `
-
-    <div class="popup-card">
-
-        <img
-        src="${photo}">
-
-        <div class="popup-title">
-
-        ${species.local_name || "Plant"}
-
-        </div>
-
-        <div class="popup-scientific">
-
-        ${species.scientific_name || ""}
-
-        </div>
-
-        <div>
-
-        ${plant.atlas_number || ""}
-
-        </div>
-
-        <div style="
-        margin-top:8px;
-        ">
-
-        ${
-            isHeritage
-
-            ?
-
-            "🏛️ Heritage Tree"
-
-            :
-
-            "🌳 Verified Plant"
-        }
-
-        </div>
-
-        <a
-
-        href="plant.html?id=${plant.id}"
-
-        class="popup-btn">
-
-        View Details
-
-        </a>
-
-    </div>
-
-    `;
-
-}
-
-/* =====================================
-   PLANT MODAL
-===================================== */
-
-async function openPlantModal(
-    plant
-){
-
-    const modal =
-    document.getElementById(
-        "plantModal"
-    );
-
-    if(!modal)
-        return;
-
-    const species =
-    plant.species || {};
-
-    document.getElementById(
-        "modalPlantTitle"
-    ).textContent =
-
-    species.local_name ||
-
-    species.english_name ||
-
-    "Plant";
-
-    document.getElementById(
-        "modalAtlasNumber"
-    ).textContent =
-
-    plant.atlas_number || "";
-
-    document.getElementById(
-        "modalScientificName"
-    ).textContent =
-
-    species.scientific_name || "";
-
-    document.getElementById(
-        "modalLocalName"
-    ).textContent =
-
-    species.local_name || "";
-
-    document.getElementById(
-        "modalContributor"
-    ).textContent =
-
-    plant.contributor_name || "";
-
-    document.getElementById(
-        "modalDescription"
-    ).textContent =
-
-    species.description || "";
-
-    document.get
-ElementById(
-    "modalPanchayat"
-).textContent =
-
-plant.panchayat_name ||
-
-"";
-
-document.getElementById(
-    "modalPhotoCount"
-).textContent =
-
-plant.photo_count || 0;
-
-document.getElementById(
-    "modalCoverPhoto"
-).src =
-
-plant.cover_photo_url ||
-
-"https://placehold.co/800x500?text=Plant";
-
-document.getElementById(
-    "openPlantPageBtn"
-).href =
-
-`plant.html?id=${plant.id}`;
-
-modal.classList.remove(
-    "hidden"
-);
-
-modal.classList.add(
-    "modal-show"
-);
-
-currentModalPlant =
-plant;
-
-}
-
-/* =====================================
-   CLOSE MODAL
-===================================== */
-
-function initModalHandlers(){
-
-    const closeBtn =
-
-    document.getElementById(
-        "closePlantModal"
-    );
-
-    if(closeBtn){
-
-        closeBtn.addEventListener(
-
-            "click",
-
-            ()=>{
-
-                document
-                .getElementById(
-                    "plantModal"
-                )
-                .classList.add(
-                    "hidden"
-                );
-
-            }
-
-        );
-
-    }
 
 }
 
@@ -1046,891 +591,407 @@ function initModalHandlers(){
 
 async function loadRecentContributions(){
 
-    const container =
+    try{
 
-    document.getElementById(
-        "recentContributions"
-    );
+        const { data, error } =
+            await supabaseClient
+            .from("plants")
+            .select(`*, species(*)`)
+            .eq("verification_status", "verified")
+            .order("created_at", { ascending: false })
+            .limit(6);
 
-    if(!container)
-        return;
+        if(error || !data) return;
 
-    const plants =
-    await getVerifiedPlants();
+        const container =
+            document.getElementById("recentContributions");
 
-    container.innerHTML = "";
+        if(!container) return;
 
-    plants
-
-    .slice(0,6)
-
-    .forEach(
-
-        plant=>{
-
-            const species =
-            plant.species || {};
-
-            const photo =
-
-            plant.cover_photo_url ||
-
-            "https://placehold.co/600x400?text=Plant";
-
-            const card =
-
-            document.createElement(
-                "div"
-            );
-
-            card.className =
-
-            "bg-white rounded-2xl overflow-hidden shadow";
-
-            card.innerHTML =
-
-            `
-
-            <img
-            src="${photo}"
-            class="w-full h-48 object-cover">
-
-            <div class="p-4">
-
-            <div class="font-bold">
-
-            ${species.local_name || ""}
-
-            </div>
-
-            <div class="italic text-sm text-gray-600">
-
-            ${species.scientific_name || ""}
-
-            </div>
-
-            <div class="mt-3">
-
-            <a
-
-            href="plant.html?id=${plant.id}"
-
-            class="text-green-700 font-semibold">
-
-            View Details →
-
-            </a>
-
-            </div>
-
-            </div>
-
-            `;
-
-            container.appendChild(
-                card
-            );
-
+        if(data.length === 0){
+            container.innerHTML = `
+            <div class="col-span-3 text-center py-12 text-gray-400">
+                <div class="text-5xl mb-3">🌱</div>
+                <div class="text-lg font-semibold">
+                    No contributions yet
+                </div>
+                <div class="text-sm mt-2">
+                    Be the first to document a plant!
+                </div>
+            </div>`;
+            return;
         }
 
-    );
+        container.innerHTML = data.map(plant => {
 
-}
+            const species = plant.species || {};
 
-/* =====================================
-   HERITAGE GRID
-===================================== */
-
-async function loadHeritageGrid(){
-
-    const container =
-
-    document.getElementById(
-        "heritageTreesGrid"
-    );
-
-    if(!container)
-        return;
-
-    const trees =
-    await getHeritageTrees();
-
-    container.innerHTML = "";
-
-    trees.forEach(
-
-        plant=>{
-
-            const species =
-            plant.species || {};
-
-            const card =
-
-            document.createElement(
-                "div"
-            );
-
-            card.className =
-            "heritage-card";
-
-            card.innerHTML =
-
-            `
-
-            <img
-            src="${
-                plant.cover_photo_url ||
-
-                'https://placehold.co/600x400?text=Heritage'
-            }">
-
+            return `
             <div
-            class="heritage-card-content">
+                onclick="window.location.href='plant.html?id=${plant.id}'"
+                style="cursor:pointer;"
+                class="bg-white rounded-2xl shadow overflow-hidden hover:shadow-lg transition">
 
-            <div
-            class="font-bold text-xl">
+                <img
+                    src="${plant.cover_photo_url || 'https://placehold.co/600x300/16a34a/white?text=🌿'}"
+                    class="w-full h-48 object-cover">
 
-            ${species.local_name || ""}
+                <div class="p-5">
 
-            </div>
+                    <div class="font-bold text-lg text-green-800">
+                        ${species.local_name || species.english_name || "Plant"}
+                    </div>
 
-            <div
-            class="italic text-gray-600">
+                    <div class="italic text-sm text-gray-500 mt-1">
+                        ${species.scientific_name || ""}
+                    </div>
 
-            ${species.scientific_name || ""}
+                    <div class="mt-3 flex items-center justify-between text-xs text-gray-400">
+                        <span>🔖 ${plant.atlas_number || "—"}</span>
+                        <span>👤 ${plant.contributor_name || "—"}</span>
+                    </div>
 
-            </div>
+                    ${plant.is_heritage
+                        ? `<div class="mt-3 inline-block bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full">
+                            🏛️ Heritage Tree
+                        </div>`
+                        : ""
+                    }
 
-            <div
-            class="mt-3 text-sm">
+                </div>
 
-            ${plant.atlas_number || ""}
+            </div>`;
 
-            </div>
+        }).join("");
 
-            </div>
-
-            `;
-
-            container.appendChild(
-                card
-            );
-
-        }
-
-    );
-
-}
-
-/* =====================================
-   MAP STATISTICS
-===================================== */
-
-function updateMapStatistics(){
-
-    const plants =
-    verifiedPlants || [];
-
-    const speciesSet =
-    new Set();
-
-    let heritageCount = 0;
-
-    plants.forEach(
-
-        plant=>{
-
-            if(
-
-                plant.species?.scientific_name
-
-            ){
-
-                speciesSet.add(
-
-                    plant.species
-                    .scientific_name
-
-                );
-
-            }
-
-            if(
-
-                plant.is_heritage
-
-            ){
-
-                heritageCount++;
-
-            }
-
-        }
-
-    );
-
-    const plantCountEl =
-    document.getElementById(
-        "visiblePlantCount"
-    );
-
-    if(plantCountEl){
-
-        plantCountEl.textContent =
-        plants.length;
-    }
-
-    const speciesCountEl =
-    document.getElementById(
-        "visibleSpeciesCount"
-    );
-
-    if(speciesCountEl){
-
-        speciesCountEl.textContent =
-        speciesSet.size;
-    }
-
-    const heritageEl =
-    document.getElementById(
-        "visibleHeritageCount"
-    );
-
-    if(heritageEl){
-
-        heritageEl.textContent =
-        heritageCount;
+    } catch(err){
+        console.error("Recent contributions error:", err);
     }
 
 }
 
 /* =====================================
-   INITIAL LOAD
+   HERITAGE TREES SECTION
 ===================================== */
 
-document.addEventListener(
-
-    "DOMContentLoaded",
-
-    async ()=>{
-
-        if(
-
-            document.getElementById(
-                "map"
-            )
-
-        ){
-
-            await loadVerifiedPlants();
-
-            await loadRecentContributions();
-
-            await loadHeritageGrid();
-
-            initModalHandlers();
-
-        }
-
-    }
-
-);
-/* =====================================
-   PART 7C
-   ADD PLANT WORKFLOW
-===================================== */
-
-let selectedPlantType = null;
-
-/* =====================================
-   ADD PLANT MODAL
-===================================== */
-
-function createAddPlantModal(){
-
-    if(
-        document.getElementById(
-            "addPlantModal"
-        )
-    ){
-        return;
-    }
-
-    const modal =
-    document.createElement(
-        "div"
-    );
-
-    modal.id =
-    "addPlantModal";
-
-    modal.className =
-    "fixed inset-0 bg-black/70 hidden z-[99999] overflow-y-auto";
-
-    modal.innerHTML = `
-
-    <div
-    class="min-h-screen flex items-center justify-center p-4">
-
-    <div
-    class="bg-white rounded-3xl w-full max-w-3xl p-6">
-
-    <div
-    class="flex justify-between items-center mb-6">
-
-    <h2 class="text-2xl font-bold">
-
-    Add Plant
-
-    </h2>
-
-    <button
-    onclick="closeAddPlantModal()"
-    class="text-3xl">
-
-    ×
-
-    </button>
-
-    </div>
-
-    <form id="addPlantForm">
-
-    <div
-    class="grid md:grid-cols-2 gap-4">
-
-    <input
-
-    id="localName"
-
-    placeholder="Local Name"
-
-    class="border p-3 rounded-xl">
-
-    <input
-
-    id="englishName"
-
-    placeholder="English Name"
-
-    class="border p-3 rounded-xl">
-
-    <input
-
-    id="scientificName"
-
-    placeholder="Scientific Name"
-
-    class="border p-3 rounded-xl">
-
-    <input
-
-    id="contributorName"
-
-    placeholder="Contributor Name"
-
-    class="border p-3 rounded-xl">
-
-  
-
-  <input
-id="contributorAssociation"
-placeholder="Association / School / Eco Club / Organization"
-class="border p-3 rounded-xl">
-<input
-id="contributorPhone"
-placeholder="Mobile Number"
-class="border p-3 rounded-xl">
-
-    </div>
-
-    <textarea
-
-    id="plantDescription"
-
-    placeholder="Description"
-
-    class="border p-3 rounded-xl w-full mt-4 h-28">
-
-    </textarea>
-
-    <div class="mt-4">
-
-    <label class="font-semibold">
-
-    Panchayat
-
-    </label>
-
-    <select
-    id="plantPanchayat"
-    class="border p-3 rounded-xl w-full mt-2">
-
-    <option value="">
-    Select Panchayat
-    </option>
-
-    </select>
-
-    </div>
-
-    <div class="mt-4">
-
-    <label class="font-semibold">
-
-    Upload Photos
-
-    </label>
-
-    <input
-
-    type="file"
-
-    id="plantPhotos"
-
-    multiple
-
-    accept="image/*"
-
-    class="w-full mt-2">
-
-    </div>
-
-    <div
-   class="mt-6 flex gap-3">
-
-<button
-
-type="submit"
-
-class="bg-green-700 text-white px-6 py-3 rounded-xl">
-
-Save Plant
-
-</button>
-
-<button
-
-type="button"
-
-onclick="closeAddPlantModal()"
-
-class="bg-slate-500 text-white px-6 py-3 rounded-xl">
-
-Cancel
-
-</button>
-
-</div>
-
-</form>
-
-</div>
-
-</div>
-
-`;
-
-    document.body.appendChild(
-        modal
-    );
-
-    populatePanchayatDropdown();
-
-    document
-
-    .getElementById(
-        "addPlantForm"
-    )
-
-    .addEventListener(
-
-        "submit",
-
-        submitPlantForm
-
-    );
-
-}
-
-/* =====================================
-   OPEN MODAL
-===================================== */
-
-function openAddPlantForm(
-
-    plantType,
-
-    latlng
-
-){
-
-    selectedPlantType =
-    plantType;
-
-    longPressLatLng =
-    latlng;
-
-    createAddPlantModal();
-
-    document
-
-    .getElementById(
-        "addPlantModal"
-    )
-
-    .classList.remove(
-        "hidden"
-    );
-
-}
-
-/* =====================================
-   CLOSE MODAL
-===================================== */
-
-function closeAddPlantModal(){
-
-    const modal =
-
-    document.getElementById(
-        "addPlantModal"
-    );
-
-    if(modal){
-
-        modal.classList.add(
-            "hidden"
-        );
-
-    }
-
-}
-
-/* =====================================
-   LOAD PANCHAYATS
-===================================== */
-
-async function populatePanchayatDropdown(){
-
-    const dropdown =
-
-    document.getElementById(
-        "plantPanchayat"
-    );
-
-    if(!dropdown)
-        return;
-
-    const {
-
-        data,
-        error
-
-    } =
-
-    await supabaseClient
-
-    .from("panchayats")
-
-    .select("*")
-
-    .order(
-        "name"
-    );
-
-    if(error){
-
-        console.error(error);
-
-        return;
-
-    }
-
-    dropdown.innerHTML =
-
-    `<option value="">
-    Select Panchayat
-    </option>`;
-
-    data.forEach(
-
-        p=>{
-
-            dropdown.innerHTML +=
-
-            `
-
-            <option value="${p.id}">
-
-            ${p.name}
-
-            </option>
-
-            `;
-
-        }
-
-    );
-
-}
-
-/* =====================================
-   SUBMIT PLANT
-===================================== */
-
-async function submitPlantForm(e){
-
-    e.preventDefault();
+async function loadHeritageSection(){
 
     try{
 
-        const localName =
+        const heritagePlants = await getHeritageTrees();
 
-        document.getElementById(
-            "localName"
-        ).value;
+        const grid =
+            document.getElementById("heritageTreesGrid");
 
-        const englishName =
+        if(!grid) return;
 
-        document.getElementById(
-            "englishName"
-        ).value;
-
-        const scientificName =
-
-        document.getElementById(
-            "scientificName"
-        ).value;
-
-        const contributorName =
-
-        document.getElementById(
-            "contributorName"
-        ).value;
-
-       const contributorAssociation =
-document.getElementById(
-    "contributorAssociation"
-).value;
-
-const contributorPhone =
-document.getElementById(
-    "contributorPhone"
-).value;
-
-        const description =
-
-        document.getElementById(
-            "plantDescription"
-        ).value;
-
-        const panchayatId =
-
-        document.getElementById(
-            "plantPanchayat"
-        ).value;
-       
-if(
-    !scientificName ||
-    !contributorName ||
-    !contributorAssociation ||
-    !longPressLatLng
-){
-
-            alert(
-                "Scientific name is required"
-            );
-
+        if(heritagePlants.length === 0){
+            grid.innerHTML = `
+            <div class="col-span-3 text-center py-12 text-gray-400">
+                <div class="text-5xl mb-3">🏛️</div>
+                <div class="text-lg font-semibold">
+                    No heritage trees registered yet
+                </div>
+            </div>`;
             return;
-
         }
 
-        const plant =
+        grid.innerHTML = heritagePlants.map(plant => {
 
-        await createPlant({
+            const species = plant.species || {};
 
-            scientific_name:
-            scientificName,
+            return `
+            <div
+                onclick="window.location.href='plant.html?id=${plant.id}'"
+                style="cursor:pointer;"
+                class="bg-white rounded-2xl shadow overflow-hidden border-2 border-blue-100 hover:shadow-lg transition">
 
-            english_name:
-            englishName,
+                <div style="position:relative;">
+                    <img
+                        src="${plant.cover_photo_url || 'https://placehold.co/600x300/1d4ed8/white?text=🏛️'}"
+                        class="w-full h-52 object-cover">
 
-            local_name:
-            localName,
+                    <div style="
+                        position:absolute;
+                        top:12px;
+                        left:12px;
+                        background:#1d4ed8;
+                        color:white;
+                        padding:4px 12px;
+                        border-radius:999px;
+                        font-size:11px;
+                        font-weight:700;
+                    ">🏛️ Heritage</div>
+                </div>
 
-            description:
-            description,
+                <div class="p-5">
 
-            latitude:
-            longPressLatLng.lat,
+                    <div class="font-bold text-xl text-blue-900">
+                        ${species.local_name || species.english_name || "Heritage Tree"}
+                    </div>
 
-            longitude:
-            longPressLatLng.lng,
+                    <div class="italic text-sm text-gray-500 mt-1">
+                        ${species.scientific_name || ""}
+                    </div>
 
-            contributor_name:
-            contributorName,
+                    <div class="mt-3 text-xs text-gray-400 flex flex-col gap-1">
+                        <span>🔖 ${plant.atlas_number || "—"}</span>
+                        <span>👤 ${plant.contributor_name || "—"}</span>
+                    </div>
 
-contributor_association:
-contributorAssociation,
+                </div>
 
-contributor_phone:
-contributorPhone,
+            </div>`;
 
-            panchayat_id:
-            panchayatId,
+        }).join("");
 
-            plant_type:
-            selectedPlantType
+    } catch(err){
+        console.error("Heritage section error:", err);
+    }
 
+}
+
+/* =====================================
+   LEADERBOARD
+===================================== */
+
+async function loadLeaderboard(){
+
+    try{
+
+        const { data, error } =
+            await supabaseClient
+            .from("plants")
+            .select("contributor_name, verification_status")
+            .eq("verification_status", "verified");
+
+        if(error || !data) return;
+
+        const table =
+            document.getElementById("leaderboardTable");
+
+        if(!table) return;
+
+        const stats = {};
+
+        data.forEach(plant => {
+            const name = plant.contributor_name || "Anonymous";
+            stats[name] = (stats[name] || 0) + 1;
         });
 
-        if(!plant){
+        const sorted = Object.entries(stats)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10);
 
-            alert(
-                "Failed to save plant"
-            );
-
+        if(sorted.length === 0){
+            table.innerHTML = `
+            <tr>
+                <td colspan="3" class="p-8 text-center text-gray-400">
+                    No contributors yet
+                </td>
+            </tr>`;
             return;
-
         }
 
-        await uploadSelectedPhotos(
-            plant.id
-        );
+        const medals = ["🥇","🥈","🥉"];
 
-        closeAddPlantModal();
+        table.innerHTML = sorted.map(([name, count], i) => `
+        <tr class="border-b hover:bg-green-50 transition">
 
-        alert(
+            <td class="p-4 font-bold text-lg">
+                ${medals[i] || (i + 1)}
+            </td>
 
-            "Plant submitted successfully.\n\nStatus: Pending Verification"
+            <td class="p-4 font-semibold">
+                ${name}
+            </td>
 
-        );
+            <td class="p-4">
+                <span class="
+                    bg-green-100
+                    text-green-800
+                    font-bold
+                    px-3 py-1
+                    rounded-full
+                    text-sm
+                ">
+                    ${count} plants
+                </span>
+            </td>
 
-    }
+        </tr>`).join("");
 
-    catch(error){
-
-        console.error(error);
-
-        alert(
-            error.message
-        );
-
+    } catch(err){
+        console.error("Leaderboard error:", err);
     }
 
 }
 
 /* =====================================
-   PHOTO UPLOAD
+   PLANT MODAL (click from map)
 ===================================== */
 
-async function uploadSelectedPhotos(
-    plantId
-){
+function openPlantModal(plantId){
 
-    const input =
+    const plant = allPlants.find(p => p.id === plantId);
+    if(!plant) return;
 
-    document.getElementById(
-        "plantPhotos"
-    );
+    const species = plant.species || {};
+    const panchayat = plant.panchayats || {};
 
-    if(
+    setText("modalPlantTitle",
+        species.local_name || species.english_name || "Plant");
 
-        !input ||
+    setText("modalAtlasNumber",   plant.atlas_number || "—");
+    setText("modalScientificName",species.scientific_name || "—");
+    setText("modalLocalName",     species.local_name || "—");
+    setText("modalContributor",   plant.contributor_name || "—");
+    setText("modalDescription",   species.description || "No description.");
+    setText("modalPanchayat",     panchayat.name || "—");
+    setText("modalPhotoCount",    plant.photo_count || 0);
 
-        !input.files ||
-
-        input.files.length === 0
-
-    ){
-
-        return;
+    const coverImg = document.getElementById("modalCoverPhoto");
+    if(coverImg){
+        coverImg.src = plant.cover_photo_url ||
+            "https://placehold.co/800x400/16a34a/white?text=🌿";
     }
 
-    const files =
+    const openBtn = document.getElementById("openPlantPageBtn");
+    if(openBtn){
+        openBtn.href = `plant.html?id=${plant.id}`;
+    }
 
-    Array.from(
-        input.files
-    );
+    const modal = document.getElementById("plantModal");
+    if(modal) modal.classList.remove("hidden");
 
-    for(
-
-        const file of files
-
-    ){
-
-        await uploadPlantPhoto(
-
-            plantId,
-
-            file,
-
-            ""
-
-        );
-
+    // QR button
+    const qrBtn = document.getElementById("showQRBtn");
+    if(qrBtn){
+        qrBtn.onclick = () => {
+            modal.classList.add("hidden");
+            showQRFromMap(plant.id);
+        };
     }
 
 }
 
 /* =====================================
-   QUICK PREVIEW
+   QR CODE (from map popup)
 ===================================== */
 
-function previewPlantMarker(
+function showQRFromMap(plantId){
 
-    lat,
+    qrPlantId = plantId;
 
-    lng,
+    const qrModal = document.getElementById("qrModal");
+    const qrContainer = document.getElementById("qrcode");
 
-    plantType
+    if(!qrModal || !qrContainer) return;
 
-){
+    qrContainer.innerHTML = "";
 
-    let icon =
-    treeIcon;
+    const url = `${window.location.origin}/plant.html?id=${plantId}`;
 
-    switch(
+    new QRCode(qrContainer, {
+        text: url,
+        width: 250,
+        height: 250,
+        colorDark: "#14532d",
+        colorLight: "#ffffff"
+    });
 
-        plantType
-
-    ){
-
-        case "herb":
-
-            icon = herbIcon;
-            break;
-
-        case "rare":
-
-            icon = rareIcon;
-            break;
-
-        case "fruit":
-
-            icon = fruitIcon;
-            break;
-
-        case "palm":
-
-            icon = palmIcon;
-            break;
-
-    }
-
-    L.marker(
-
-        [lat,lng],
-
-        {
-
-            icon:icon
-
-        }
-
-    )
-
-    .addTo(map);
+    qrModal.classList.remove("hidden");
 
 }
+
+/* =====================================
+   INIT MODALS & EVENTS
+===================================== */
+
+function initMapEvents(){
+
+    // Search button
+    document.getElementById("searchBtn")
+        ?.addEventListener("click", applyFilters);
+
+    // Live search on Enter
+    document.getElementById("searchInput")
+        ?.addEventListener("keydown", e => {
+            if(e.key === "Enter") applyFilters();
+        });
+
+    // Filter changes
+    ["panchayatFilter","speciesFilter","heritageFilter"]
+        .forEach(id => {
+            document.getElementById(id)
+                ?.addEventListener("change", applyFilters);
+        });
+
+    // Reset filters
+    document.getElementById("resetFiltersBtn")
+        ?.addEventListener("click", resetFilters);
+
+    // Locate me
+    document.getElementById("locateMeBtn")
+        ?.addEventListener("click", locateMe);
+
+    // Refresh map
+    document.getElementById("refreshMapBtn")
+        ?.addEventListener("click", loadMapPlants);
+
+    // Close plant modal
+    document.getElementById("closePlantModal")
+        ?.addEventListener("click", () => {
+            document.getElementById("plantModal")
+                ?.classList.add("hidden");
+        });
+
+    // Close QR modal
+    document.getElementById("closeQRModal")
+        ?.addEventListener("click", () => {
+            document.getElementById("qrModal")
+                ?.classList.add("hidden");
+        });
+
+    // Close gallery modal
+    document.getElementById("closeGalleryModal")
+        ?.addEventListener("click", () => {
+            document.getElementById("galleryModal")
+                ?.classList.add("hidden");
+        });
+
+    // Click outside modal to close
+    document.getElementById("plantModal")
+        ?.addEventListener("click", function(e){
+            if(e.target === this)
+                this.classList.add("hidden");
+        });
+
+    document.getElementById("qrModal")
+        ?.addEventListener("click", function(e){
+            if(e.target === this)
+                this.classList.add("hidden");
+        });
+
+}
+
+/* =====================================
+   HELPER: setText
+===================================== */
+
+function setText(id, value){
+    const el = document.getElementById(id);
+    if(el) el.textContent = value;
+}
+
+/* =====================================
+   STARTUP
+===================================== */
+
+document.addEventListener("DOMContentLoaded", async () => {
+
+    initMap();
+    initMapEvents();
+    await loadMapPlants();
+
+});
