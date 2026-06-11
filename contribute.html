@@ -40,18 +40,21 @@
             <textarea id="description" placeholder="Description" class="w-full border rounded-xl p-3 h-32"></textarea>
             
             <div class="border rounded-xl p-4 bg-gray-50 space-y-3">
-                <label class="font-semibold block text-gray-700">Plant Photos</label>
+                <div class="flex justify-between items-center">
+                    <label class="font-semibold block text-gray-700">Plant Photos <span id="photoCountText" class="text-sm font-normal text-gray-500">(0/3)</span></label>
+                    <button type="button" id="clearGalleryBtn" class="hidden text-xs text-red-600 font-semibold hover:underline">Clear Gallery Files</button>
+                </div>
                 
                 <div class="flex flex-wrap gap-2 mb-2">
-                    <button type="button" id="startCameraBtn" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold">📸 Open Camera</button>
-                    <label for="photoFiles" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer border hover:bg-gray-300">📁 Choose Gallery Files</label>
+                    <button type="button" id="startCameraBtn" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed">📸 Open Camera</button>
+                    <label id="galleryLabel" for="photoFiles" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer border hover:bg-gray-300 block">📁 Choose Gallery Files</label>
                     <input type="file" id="photoFiles" accept="image/*" multiple class="hidden">
                 </div>
 
                 <div id="cameraContainer" class="hidden space-y-2 bg-black p-2 rounded-xl flex flex-col items-center">
                     <video id="video" autoplay playsinline class="w-full max-w-md rounded-lg bg-gray-900"></video>
                     <div class="flex gap-2">
-                        <button type="button" id="captureBtn" class="bg-red-500 text-white px-4 py-2 rounded-lg font-bold text-sm">🎯 Capture Photo</button>
+                        <button type="button" id="captureBtn" class="bg-red-500 text-white px-4 py-2 rounded-lg font-bold text-sm disabled:opacity-50">🎯 Capture Photo</button>
                         <button type="button" id="stopCameraBtn" class="bg-gray-500 text-white px-4 py-2 rounded-lg text-sm">Cancel</button>
                     </div>
                 </div>
@@ -84,6 +87,7 @@
 let map;
 let marker = null;
 let capturedFilesArray = []; // Stores standard JS File objects generated from camera snaps
+const MAX_PHOTOS = 3;
 
 /* =====================================
 MAP
@@ -122,14 +126,52 @@ function initMap(){
 
 /* =====================================
 CAMERA & PREVIEW ENGINE
-===================================== */
+==================================== */
 const video = document.getElementById('video');
 const cameraContainer = document.getElementById('cameraContainer');
 const previewGrid = document.getElementById('previewGrid');
+const photoCountText = document.getElementById('photoCountText');
+const startCameraBtn = document.getElementById('startCameraBtn');
+const galleryLabel = document.getElementById('galleryLabel');
+const captureBtn = document.getElementById('captureBtn');
+const fileInput = document.getElementById('photoFiles');
+const clearGalleryBtn = document.getElementById('clearGalleryBtn');
 let streamInstance = null;
 
+// Calculate total pictures current held in application memory
+function getTotalPhotoCount() {
+    return fileInput.files.length + capturedFilesArray.length;
+}
+
+// Update Action controls depending on current photo balance
+function updateActionUIState() {
+    const total = getTotalPhotoCount();
+    photoCountText.textContent = `(${total}/${MAX_PHOTOS})`;
+
+    if (fileInput.files.length > 0) {
+        clearGalleryBtn.classList.remove('hidden');
+    } else {
+        clearGalleryBtn.classList.add('hidden');
+    }
+
+    if (total >= MAX_PHOTOS) {
+        startCameraBtn.disabled = true;
+        captureBtn.disabled = true;
+        galleryLabel.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+        closeCamera();
+    } else {
+        startCameraBtn.disabled = false;
+        captureBtn.disabled = false;
+        galleryLabel.classList.remove('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+    }
+}
+
 // Start Camera Stream
-document.getElementById('startCameraBtn').addEventListener('click', async () => {
+startCameraBtn.addEventListener('click', async () => {
+    if (getTotalPhotoCount() >= MAX_PHOTOS) {
+        alert(`You can only upload up to ${MAX_PHOTOS} photos.`);
+        return;
+    }
     try {
         streamInstance = await navigator.mediaDevices.getUserMedia({ 
             video: { facingMode: "environment" }, 
@@ -147,14 +189,20 @@ document.getElementById('startCameraBtn').addEventListener('click', async () => 
 function closeCamera() {
     if (streamInstance) {
         streamInstance.getTracks().forEach(track => track.stop());
+        streamInstance = null;
     }
     cameraContainer.classList.add('hidden');
 }
 document.getElementById('stopCameraBtn').addEventListener('click', closeCamera);
 
 // Capture Canvas Snap -> Array
-document.getElementById('captureBtn').addEventListener('click', () => {
+captureBtn.addEventListener('click', () => {
     if (!streamInstance) return;
+    if (getTotalPhotoCount() >= MAX_PHOTOS) {
+        alert(`Limit reached. You can only save up to ${MAX_PHOTOS} photos.`);
+        closeCamera();
+        return;
+    }
     
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
@@ -172,8 +220,21 @@ document.getElementById('captureBtn').addEventListener('click', () => {
     }, 'image/jpeg', 0.85);
 });
 
-// Sync Gallery Input selection
-document.getElementById('photoFiles').addEventListener('change', () => {
+// Sync Gallery Input selection with restriction rules
+fileInput.addEventListener('change', () => {
+    const currentCameraCount = capturedFilesArray.length;
+    const allowedRemaining = MAX_PHOTOS - currentCameraCount;
+
+    if (fileInput.files.length > allowedRemaining) {
+        alert(`You can only select up to ${allowedRemaining} more photo(s) from your gallery.`);
+        fileInput.value = ""; // Clear out selection completely
+    }
+    renderPreviews();
+});
+
+// Clear explicit gallery data bindings
+clearGalleryBtn.addEventListener('click', () => {
+    fileInput.value = "";
     renderPreviews();
 });
 
@@ -182,12 +243,10 @@ function renderPreviews() {
     previewGrid.innerHTML = "";
     
     // 1. Process standard input files
-    const inputFiles = document.getElementById('photoFiles').files;
-    Array.from(inputFiles).forEach((file, index) => {
+    const inputFiles = fileInput.files;
+    Array.from(inputFiles).forEach((file) => {
         createPreviewCard(file, () => {
-            // Because FileList is immutable, we clear input if removing individual items is needed, 
-            // or we filter it via alternative visual handling. Simple implementation clears input file reference.
-            alert("To remove this file, clear or re-select gallery images.");
+            alert("To remove gallery photos, use the 'Clear Gallery Files' option.");
         });
     });
 
@@ -198,6 +257,8 @@ function renderPreviews() {
             renderPreviews();
         });
     });
+
+    updateActionUIState();
 }
 
 function createPreviewCard(file, removeCallback) {
@@ -234,11 +295,10 @@ document.getElementById("plantForm").addEventListener("submit", async function(e
         });
 
         if(result){
-            // Compile unified file list combining custom captures and UI input selection
-            const inputFiles = Array.from(document.getElementById("photoFiles").files);
+            const inputFiles = Array.from(fileInput.files);
             const absolutePhotoQueue = [...inputFiles, ...capturedFilesArray];
 
-            // Safely push files to storage sequentially using legacy module logic
+            // Safely push files up sequentially (will be at most 3 elements)
             for(let i = 0; i < absolutePhotoQueue.length; i++){
                 await uploadPlantPhoto(
                     result.id,
@@ -259,7 +319,7 @@ document.getElementById("plantForm").addEventListener("submit", async function(e
             document.getElementById("message").innerHTML = "✅ Plant submitted successfully with photos.";
             document.getElementById("plantForm").reset();
             capturedFilesArray = [];
-            previewGrid.innerHTML = "";
+            renderPreviews();
             closeCamera();
         } else {
             document.getElementById("message").innerHTML = "❌ Submission failed.";
@@ -272,37 +332,4 @@ document.getElementById("plantForm").addEventListener("submit", async function(e
 
 /* =====================================
 START
-===================================== */
-document.addEventListener("DOMContentLoaded", async ()=>{
-    let sessionFound = false;
-    const { data: sessionData } = await supabaseClient.auth.getSession();
-
-    if(sessionData?.session?.user){
-        sessionFound = true;
-        initMap();
-        return;
-    }
-
-    await new Promise((resolve) => {
-        const timeout = setTimeout(() => { resolve(); }, 3000);
-        const { data: listener } = supabaseClient.auth.onAuthStateChange((event, session) => {
-            if(session?.user){
-                sessionFound = true;
-                clearTimeout(timeout);
-                listener.subscription.unsubscribe();
-                resolve();
-            }
-        });
-    });
-
-    if(!sessionFound){
-        sessionStorage.setItem("redirectAfterLogin", window.location.href);
-        window.location.href = "login.html";
-        return;
-    }
-
-    initMap();
-});
-</script>
-</body>
-</html>
+================================
