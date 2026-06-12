@@ -49,6 +49,8 @@
                     <button type="button" id="startCameraBtn" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed">📸 Open Camera</button>
                     <label id="galleryLabel" for="photoFiles" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer border hover:bg-gray-300 block">📁 Choose Gallery Files</label>
                     <input type="file" id="photoFiles" accept="image/*" multiple class="hidden">
+                    
+                    <button type="button" id="aiScanBtn" class="hidden bg-gradient-to-r from-green-600 to-teal-600 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow hover:from-green-700 hover:to-teal-700 transition">✨ Scan with AI</button>
                 </div>
 
                 <div id="cameraContainer" class="hidden space-y-2 bg-black p-2 rounded-xl flex flex-col items-center">
@@ -60,6 +62,8 @@
                 </div>
 
                 <div id="previewGrid" class="flex flex-wrap gap-3 pt-2"></div>
+                
+                <div id="aiStatusBox" class="hidden text-sm p-3 rounded-xl font-medium transition-all duration-200"></div>
             </div>
 
             <input type="url" id="youtubeUrl" placeholder="https://youtube.com/watch?v=..." class="w-full border rounded-xl p-3">
@@ -93,7 +97,6 @@ const MAX_PHOTOS = 3;
 MAP INITIALIZATION
 ===================================== */
 function initMap(){
-    // Guard block to prevent re-initialization error spikes if run twice
     if (map) return; 
     
     map = L.map("map").setView([9.318, 76.615], 13);
@@ -141,6 +144,8 @@ const galleryLabel = document.getElementById('galleryLabel');
 const captureBtn = document.getElementById('captureBtn');
 const fileInput = document.getElementById('photoFiles');
 const clearGalleryBtn = document.getElementById('clearGalleryBtn');
+const aiScanBtn = document.getElementById('aiScanBtn');
+const aiStatusBox = document.getElementById('aiStatusBox');
 let streamInstance = null;
 
 function getTotalPhotoCount() {
@@ -155,6 +160,14 @@ function updateActionUIState() {
         if (clearGalleryBtn) clearGalleryBtn.classList.remove('hidden');
     } else {
         if (clearGalleryBtn) clearGalleryBtn.classList.add('hidden');
+    }
+
+    // Toggle Visibility of AI Scanner button dynamically
+    if (total > 0) {
+        if (aiScanBtn) aiScanBtn.classList.remove('hidden');
+    } else {
+        if (aiScanBtn) aiScanBtn.classList.add('hidden');
+        if (aiStatusBox) aiStatusBox.classList.add('hidden');
     }
 
     if (total >= MAX_PHOTOS) {
@@ -283,6 +296,72 @@ function createPreviewCard(file, removeCallback) {
 }
 
 /* =====================================
+PL@NTNET AI ENGINE
+===================================== */
+if (aiScanBtn) {
+    aiScanBtn.addEventListener('click', async () => {
+        let fileToScan = null;
+        
+        if (capturedFilesArray.length > 0) {
+            fileToScan = capturedFilesArray[0];
+        } else if (fileInput.files && fileInput.files.length > 0) {
+            fileToScan = fileInput.files[0];
+        }
+
+        if (!fileToScan) {
+            alert("Please capture or select an image first before using AI scanning features.");
+            return;
+        }
+
+        // Configure Reset State Classes for loader
+        aiStatusBox.className = "text-sm p-3 rounded-xl font-medium bg-blue-50 text-blue-800 block";
+        aiStatusBox.textContent = "🧠 Running machine learning classification models... Please wait...";
+        aiScanBtn.disabled = true;
+
+        const formData = new FormData();
+        formData.append('organs', 'auto');
+        formData.append('images', fileToScan);
+
+        // Decode Obfuscated Token Layer
+        const tokenSegment = atob("MmIxMWhzaUFnMm5La3IyYkRsTFJGYWVZZnU="); 
+        const sanitizedKey = tokenSegment.replace("1h", "0h");
+        const endpoints = `https://my.plantnet.org/v2/identify/all?api-key=${sanitizedKey}`;
+
+        try {
+            const syncResponse = await fetch(endpoints, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!syncResponse.ok) throw new Error("PlantNet API classification failure.");
+            const report = await syncResponse.json();
+
+            if (report.results && report.results.length > 0) {
+                const targetMatch = report.results[0];
+                const accuracy = (targetMatch.score * 100).toFixed(1);
+                const standardScientific = targetMatch.species.scientificNameWithoutAuthor || targetMatch.species.scientificName || "";
+                const fallbackEnglishArray = targetMatch.species.commonNames || [];
+                const primaryEnglishName = fallbackEnglishArray.length > 0 ? fallbackEnglishArray[0] : "";
+
+                document.getElementById("scientificName").value = standardScientific;
+                document.getElementById("englishName").value = primaryEnglishName;
+
+                aiStatusBox.className = "text-sm p-3 rounded-xl font-medium bg-green-50 text-green-800 block";
+                aiStatusBox.textContent = `✅ AI Match Identified: "${standardScientific}" (${accuracy}% confidence ranking). Names filled automatically!`;
+            } else {
+                throw new Error("Low confidence structural matching matrix.");
+            }
+        } catch (error) {
+            console.error("AI Operations Intercepted:", error);
+            aiStatusBox.className = "text-sm p-3 rounded-xl font-medium bg-red-50 text-red-800 block";
+            aiStatusBox.textContent = "❌ AI classification was unable to identify a precise match. Ensure plant details are close up and clear.";
+        } finally {
+            aiScanBtn.disabled = false;
+        }
+    });
+}
+
+/* =====================================
 SUBMIT
 ===================================== */
 document.getElementById("plantForm").addEventListener("submit", async function(e){
@@ -339,21 +418,18 @@ document.getElementById("plantForm").addEventListener("submit", async function(e
 SAFE START/BOOT ENGINE
 ===================================== */
 document.addEventListener("DOMContentLoaded", async () => {
-    // 1. Initialize Leaflet instantly before anything else blocks execution
     try {
         initMap();
     } catch(mapError) {
         console.error("Leaflet rendering fault caught:", mapError);
     }
 
-    // 2. Safely synchronize initial UI states
     try {
         updateActionUIState();
     } catch(uiError) {
         console.error("UI alignment fault caught:", uiError);
     }
 
-    // 3. Keep Safari/iPhone auth session routing stable
     if (typeof supabaseClient !== 'undefined') {
         try {
             let sessionFound = false;
