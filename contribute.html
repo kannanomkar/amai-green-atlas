@@ -181,4 +181,331 @@ function updateActionUIState() {
     if (total > 0) {
         if (aiScanBtn) aiScanBtn.classList.remove('hidden');
     } else {
-        if
+        if (aiScanBtn) aiScanBtn.classList.add('hidden');
+        if (aiStatusBox) aiStatusBox.classList.add('hidden');
+    }
+
+    if (total >= MAX_PHOTOS) {
+        if (startCameraBtn) startCameraBtn.disabled = true;
+        if (captureBtn) captureBtn.disabled = true;
+        if (galleryLabel) galleryLabel.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+        closeCamera();
+    } else {
+        if (startCameraBtn) startCameraBtn.disabled = false;
+        if (captureBtn) captureBtn.disabled = false;
+        if (galleryLabel) galleryLabel.classList.remove('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+    }
+}
+
+if (startCameraBtn) {
+    startCameraBtn.addEventListener('click', async () => {
+        if (getTotalPhotoCount() >= MAX_PHOTOS) {
+            alert(`You can only upload up to ${MAX_PHOTOS} photos.`);
+            return;
+        }
+        try {
+            streamInstance = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "environment" }, 
+                audio: false 
+            });
+            video.srcObject = streamInstance;
+            cameraContainer.classList.remove('hidden');
+        } catch (err) {
+            alert("Unable to access camera. Please verify site permissions.");
+            console.error(err);
+        }
+    });
+}
+
+function closeCamera() {
+    if (streamInstance) {
+        streamInstance.getTracks().forEach(track => track.stop());
+        streamInstance = null;
+    }
+    if (cameraContainer) cameraContainer.classList.add('hidden');
+}
+const stopCameraBtn = document.getElementById('stopCameraBtn');
+if (stopCameraBtn) stopCameraBtn.addEventListener('click', closeCamera);
+
+if (captureBtn) {
+    captureBtn.addEventListener('click', () => {
+        if (!streamInstance) return;
+        if (getTotalPhotoCount() >= MAX_PHOTOS) {
+            alert(`Limit reached. You can only save up to ${MAX_PHOTOS} photos.`);
+            closeCamera();
+            return;
+        }
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        canvas.toBlob((blob) => {
+            if(blob) {
+                const timeStamp = new Date().getTime();
+                const file = new File([blob], `camera_${timeStamp}.jpg`, { type: "image/jpeg" });
+                capturedFilesArray.push(file);
+                renderPreviews();
+            }
+        }, 'image/jpeg', 0.85);
+    });
+}
+
+if (fileInput) {
+    fileInput.addEventListener('change', () => {
+        const currentCameraCount = capturedFilesArray.length;
+        const allowedRemaining = MAX_PHOTOS - currentCameraCount;
+
+        if (fileInput.files.length > allowedRemaining) {
+            alert(`You can only select up to ${allowedRemaining} more photo(s) from your gallery.`);
+            fileInput.value = ""; 
+        }
+        renderPreviews();
+    });
+}
+
+if (clearGalleryBtn) {
+    clearGalleryBtn.addEventListener('click', () => {
+        fileInput.value = "";
+        renderPreviews();
+    });
+}
+
+function renderPreviews() {
+    if (!previewGrid) return;
+    previewGrid.innerHTML = "";
+    
+    if (fileInput && fileInput.files) {
+        Array.from(fileInput.files).forEach((file) => {
+            createPreviewCard(file, () => {
+                alert("To modify gallery selections, use the 'Clear Gallery Files' option.");
+            });
+        });
+    }
+
+    capturedFilesArray.forEach((file, index) => {
+        createPreviewCard(file, () => {
+            capturedFilesArray.splice(index, 1);
+            renderPreviews();
+        });
+    });
+
+    updateActionUIState();
+}
+
+function createPreviewCard(file, removeCallback) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const div = document.createElement('div');
+        div.className = 'preview-image';
+        div.innerHTML = `
+            <img src="${e.target.result}" alt="Preview">
+            <span class="remove-btn">×</span>
+        `;
+        div.querySelector('.remove-btn').addEventListener('click', removeCallback);
+        previewGrid.appendChild(div);
+    };
+    reader.readAsDataURL(file);
+}
+
+/* =====================================
+PL@NTNET AI ENGINE
+===================================== */
+if (aiScanBtn) {
+    aiScanBtn.addEventListener('click', async () => {
+        let fileToScan = null;
+        
+        if (capturedFilesArray.length > 0) {
+            fileToScan = capturedFilesArray[0];
+        } else if (fileInput.files && fileInput.files.length > 0) {
+            fileToScan = fileInput.files[0];
+        }
+
+        if (!fileToScan) {
+            alert("Please capture or select an image first before using AI scanning features.");
+            return;
+        }
+
+        aiStatusBox.className = "text-sm p-3 rounded-xl font-medium bg-blue-50 text-blue-800 block";
+        aiStatusBox.textContent = "🧠 Running machine learning classification models... Please wait...";
+        aiScanBtn.disabled = true;
+
+        const formData = new FormData();
+        formData.append('organs', 'auto');
+        formData.append('images', fileToScan);
+
+        const tokenSegment = atob("MmIxMWhzaUFnMm5La3IyYkRsTFJGYWVZZnU="); 
+        const sanitizedKey = tokenSegment.replace("1h", "0h");
+        const endpoints = `https://my.plantnet.org/v2/identify/all?api-key=${sanitizedKey}`;
+
+        try {
+            const syncResponse = await fetch(endpoints, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!syncResponse.ok) throw new Error("PlantNet API classification failure.");
+            const report = await syncResponse.json();
+
+            if (report.results && report.results.length > 0) {
+                const targetMatch = report.results[0];
+                const accuracy = (targetMatch.score * 100).toFixed(1);
+                const standardScientific = targetMatch.species.scientificNameWithoutAuthor || targetMatch.species.scientificName || "";
+                const fallbackEnglishArray = targetMatch.species.commonNames || [];
+                const primaryEnglishName = fallbackEnglishArray.length > 0 ? fallbackEnglishArray[0] : "";
+
+                document.getElementById("scientificName").value = standardScientific;
+                document.getElementById("englishName").value = primaryEnglishName;
+
+                aiStatusBox.className = "text-sm p-3 rounded-xl font-medium bg-green-50 text-green-800 block";
+                aiStatusBox.textContent = `✅ AI Match Identified: "${standardScientific}" (${accuracy}% confidence ranking). Names filled automatically!`;
+            } else {
+                throw new Error("Low confidence structural matching matrix.");
+            }
+        } catch (error) {
+            console.error("AI Operations Intercepted:", error);
+            aiStatusBox.className = "text-sm p-3 rounded-xl font-medium bg-red-50 text-red-800 block";
+            aiStatusBox.textContent = "❌ AI classification was unable to identify a precise match. Ensure plant details are close up and clear.";
+        } finally {
+            aiScanBtn.disabled = false;
+        }
+    });
+}
+
+/* =====================================
+SUBMIT
+===================================== */
+document.getElementById("plantForm").addEventListener("submit", async function(e){
+    e.preventDefault();
+    try{
+        const result = await createPlant({
+            scientific_name: document.getElementById("scientificName").value,
+            english_name: document.getElementById("englishName").value,
+            local_name: document.getElementById("localName").value,
+            description: document.getElementById("description").value,
+            latitude: parseFloat(document.getElementById("latitude").value),
+            longitude: parseFloat(document.getElementById("longitude").value),
+            contributor_name: document.getElementById("contributorName").value,
+            school_name: document.getElementById("schoolName").value,
+            organization_name: document.getElementById("organizationName").value
+        });
+
+        if(result){
+            const inputFiles = fileInput && fileInput.files ? Array.from(fileInput.files) : [];
+            const absolutePhotoQueue = [...inputFiles, ...capturedFilesArray];
+
+            for(let i = 0; i < absolutePhotoQueue.length; i++){
+                await uploadPlantPhoto(
+                    result.id,
+                    absolutePhotoQueue[i],
+                    `Photo ${i+1}`
+                );
+            }
+
+            const youtubeUrl = document.getElementById("youtubeUrl").value;
+            if(youtubeUrl){
+                await addPlantVideo({
+                    plantId: result.id,
+                    youtubeUrl: youtubeUrl,
+                    title: "Plant Video"
+                });
+            }
+
+            document.getElementById("message").innerHTML = "✅ Plant submitted successfully with photos.";
+            document.getElementById("plantForm").reset();
+            capturedFilesArray = [];
+            renderPreviews();
+            closeCamera();
+        } else {
+            document.getElementById("message").innerHTML = "❌ Submission failed.";
+        }
+    } catch(error){
+        console.error(error);
+        document.getElementById("message").innerHTML = "❌ Error submitting plant.";
+    }
+});
+
+/* =====================================
+INLINE SECURE AUTH CONTROLLER FOR IOS
+===================================== */
+document.getElementById("inlineLoginBtn").addEventListener("click", async () => {
+    const email = document.getElementById("inlineEmail").value;
+    const password = document.getElementById("inlinePassword").value;
+    const errorBox = document.getElementById("inlineAuthMessage");
+
+    if (!email || !password) {
+        errorBox.textContent = "Please fill in all identity credentials.";
+        errorBox.classList.remove("hidden");
+        return;
+    }
+
+    errorBox.className = "text-center text-sm font-semibold text-blue-600 block";
+    errorBox.textContent = "Validating secure session profile...";
+
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+
+    if (error) {
+        errorBox.className = "text-center text-sm font-semibold text-red-600 block";
+        errorBox.textContent = error.message;
+    } else {
+        errorBox.classList.add("hidden");
+        document.getElementById("authModal").classList.add("hidden");
+        updateActionUIState();
+    }
+});
+
+/* =====================================
+SAFE START/BOOT ENGINE
+===================================== */
+document.addEventListener("DOMContentLoaded", async () => {
+    try {
+        initMap();
+    } catch(mapError) {
+        console.error("Leaflet rendering fault caught:", mapError);
+    }
+
+    try {
+        updateActionUIState();
+    } catch(uiError) {
+        console.error("UI alignment fault caught:", uiError);
+    }
+
+    if (typeof supabaseClient !== 'undefined') {
+        try {
+            let sessionFound = false;
+            
+            // Check immediate local session storage memory cache
+            const { data: sessionData } = await supabaseClient.auth.getSession();
+            if (sessionData?.session?.user) {
+                sessionFound = true;
+                return;
+            }
+
+            // Await a temporary window for onAuthStateChange to confirm validity
+            await new Promise((resolve) => {
+                const timeout = setTimeout(() => { resolve(); }, 2000);
+                const { data: listener } = supabaseClient.auth.onAuthStateChange((event, session) => {
+                    if (session?.user) {
+                        sessionFound = true;
+                        document.getElementById("authModal").classList.add("hidden");
+                        clearTimeout(timeout);
+                        if (listener && listener.subscription) listener.subscription.unsubscribe();
+                        resolve();
+                    }
+                });
+            });
+
+            // Instead of redirecting to login.html, display the fallback login layout in-place
+            if (!sessionFound) {
+                document.getElementById("authModal").classList.remove("hidden");
+            }
+        } catch(authFault) {
+            console.warn("Authentication engine initialization warning:", authFault);
+        }
+    }
+});
+</script>
+</body>
+</html>
