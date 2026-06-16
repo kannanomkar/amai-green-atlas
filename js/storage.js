@@ -1,4 +1,3 @@
-
 /* =====================================
    AMAI GREEN ATLAS V3
    STORAGE.JS
@@ -149,14 +148,6 @@ async function uploadPlantPhoto(
         const user =
         await getCurrentUser();
 
-        if(!user){
-
-            throw new Error(
-                "Login required"
-            );
-
-        }
-
         const compressedFile =
         await compressImage(
             file
@@ -246,7 +237,7 @@ async function uploadPlantPhoto(
             caption,
 
             uploaded_by:
-            user.id
+            user ? user.id : null
 
         });
 
@@ -637,4 +628,3 @@ async function renderPhotoGallery(
     });
 
 }
-
