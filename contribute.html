@@ -80,22 +80,6 @@
     </div>
 </div>
 
-<div id="authModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50">
-    <div class="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full space-y-5">
-        <div class="text-center">
-            <span class="text-4xl">🌿</span>
-            <h2 class="text-2xl font-bold text-gray-800 mt-2">Authentication Required</h2>
-            <p class="text-sm text-gray-500 mt-1">Please log in to add new records to the AMAI Green Atlas.</p>
-        </div>
-        <div class="space-y-3">
-            <input id="inlineEmail" type="email" placeholder="Email Address" class="w-full border rounded-xl p-3 outline-none focus:ring-2 focus:ring-green-600">
-            <input id="inlinePassword" type="password" placeholder="Password" class="w-full border rounded-xl p-3 outline-none focus:ring-2 focus:ring-green-600">
-            <button type="button" id="inlineLoginBtn" class="w-full bg-green-700 text-white py-3 rounded-xl font-bold hover:bg-green-800 transition">Sign In</button>
-        </div>
-        <div id="inlineAuthMessage" class="text-center text-sm font-semibold text-red-600 hidden"></div>
-    </div>
-</div>
-
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/supabase.js"></script>
@@ -428,35 +412,6 @@ document.getElementById("plantForm").addEventListener("submit", async function(e
 });
 
 /* =====================================
-INLINE SECURE AUTH CONTROLLER FOR IOS
-===================================== */
-document.getElementById("inlineLoginBtn").addEventListener("click", async () => {
-    const email = document.getElementById("inlineEmail").value;
-    const password = document.getElementById("inlinePassword").value;
-    const errorBox = document.getElementById("inlineAuthMessage");
-
-    if (!email || !password) {
-        errorBox.textContent = "Please fill in all identity credentials.";
-        errorBox.classList.remove("hidden");
-        return;
-    }
-
-    errorBox.className = "text-center text-sm font-semibold text-blue-600 block";
-    errorBox.textContent = "Validating secure session profile...";
-
-    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-
-    if (error) {
-        errorBox.className = "text-center text-sm font-semibold text-red-600 block";
-        errorBox.textContent = error.message;
-    } else {
-        errorBox.classList.add("hidden");
-        document.getElementById("authModal").classList.add("hidden");
-        updateActionUIState();
-    }
-});
-
-/* =====================================
 SAFE START/BOOT ENGINE
 ===================================== */
 document.addEventListener("DOMContentLoaded", async () => {
@@ -470,40 +425,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         updateActionUIState();
     } catch(uiError) {
         console.error("UI alignment fault caught:", uiError);
-    }
-
-    if (typeof supabaseClient !== 'undefined') {
-        try {
-            let sessionFound = false;
-            
-            // Check immediate local session storage memory cache
-            const { data: sessionData } = await supabaseClient.auth.getSession();
-            if (sessionData?.session?.user) {
-                sessionFound = true;
-                return;
-            }
-
-            // Await a temporary window for onAuthStateChange to confirm validity
-            await new Promise((resolve) => {
-                const timeout = setTimeout(() => { resolve(); }, 2000);
-                const { data: listener } = supabaseClient.auth.onAuthStateChange((event, session) => {
-                    if (session?.user) {
-                        sessionFound = true;
-                        document.getElementById("authModal").classList.add("hidden");
-                        clearTimeout(timeout);
-                        if (listener && listener.subscription) listener.subscription.unsubscribe();
-                        resolve();
-                    }
-                });
-            });
-
-            // Instead of redirecting to login.html, display the fallback login layout in-place
-            if (!sessionFound) {
-                document.getElementById("authModal").classList.remove("hidden");
-            }
-        } catch(authFault) {
-            console.warn("Authentication engine initialization warning:", authFault);
-        }
     }
 });
 </script>
