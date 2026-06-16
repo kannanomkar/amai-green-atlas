@@ -577,6 +577,19 @@ function openEditModal(plantId){
     setValue("editLongitude",
         plant.longitude || "");
 
+    // Reset new photo/video fields
+    const photoFileInput = document.getElementById("editPhotoFile");
+    if(photoFileInput) photoFileInput.value = "";
+    setText("editPhotoStatus", "");
+    setText("editVideoStatus", "");
+    const photoPreview = document.getElementById("editPhotoPreview");
+    if(photoPreview) photoPreview.innerHTML = "";
+    setValue("editVideoTitle", "");
+    setValue("editVideoUrl", "");
+
+    // Load existing videos for this plant
+    loadEditVideos(plantId);
+
     document.getElementById("editModal").classList.remove("hidden");
 
 }
@@ -584,6 +597,183 @@ function openEditModal(plantId){
 function closeEditModal(){
     document.getElementById("editModal").classList.add("hidden");
     editingPlantId = null;
+}
+
+/* =====================================
+   PLANT VIDEOS — LOAD / RENDER / ADD / DELETE
+===================================== */
+
+async function getPlantVideos(plantId){
+    const { data, error } =
+        await supabaseClient
+        .from("plant_videos")
+        .select("*")
+        .eq("plant_id", plantId)
+        .order("id", { ascending: true });
+    if(error){
+        console.error(error);
+        return [];
+    }
+    return data || [];
+}
+
+function renderEditVideosList(videos){
+    const list = document.getElementById("editVideosList");
+    if(!list) return;
+
+    if(videos.length === 0){
+        list.innerHTML = `<div class="text-gray-400 text-xs">No videos added</div>`;
+        return;
+    }
+
+    list.innerHTML = videos.map(v => `
+        <div class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+            <a href="${v.youtube_url}" target="_blank"
+               class="text-blue-600 underline truncate mr-2 text-xs">
+                ${v.title || v.youtube_url}
+            </a>
+            <button
+                type="button"
+                onclick="deleteEditVideo('${v.id}')"
+                class="text-red-600 text-xs font-semibold shrink-0">
+                🗑
+            </button>
+        </div>
+    `).join("");
+}
+
+async function loadEditVideos(plantId){
+    const videos = await getPlantVideos(plantId);
+    renderEditVideosList(videos);
+}
+
+async function addEditVideo(){
+
+    if(!editingPlantId) return;
+
+    const youtubeUrl = (getValue("editVideoUrl") || "").trim();
+    const title = (getValue("editVideoTitle") || "").trim();
+
+    if(!youtubeUrl){
+        setText("editVideoStatus", "Please enter a YouTube URL.");
+        return;
+    }
+
+    setText("editVideoStatus", "Adding...");
+
+    const { error } =
+        await supabaseClient
+        .from("plant_videos")
+        .insert({
+            plant_id: editingPlantId,
+            youtube_url: youtubeUrl,
+            title: title || null
+        });
+
+    if(error){
+        console.error(error);
+        setText("editVideoStatus", "Failed to add video.");
+        return;
+    }
+
+    setValue("editVideoUrl", "");
+    setValue("editVideoTitle", "");
+    setText("editVideoStatus", "Video added.");
+
+    await loadEditVideos(editingPlantId);
+
+}
+
+async function deleteEditVideo(videoId){
+
+    const ok = confirm("Remove this video?");
+    if(!ok) return;
+
+    const { error } =
+        await supabaseClient
+        .from("plant_videos")
+        .delete()
+        .eq("id", videoId);
+
+    if(error){
+        console.error(error);
+        showAdminNotification("Failed to delete video.", "error");
+        return;
+    }
+
+    await loadEditVideos(editingPlantId);
+
+}
+
+/* =====================================
+   PHOTO UPLOAD FROM EDIT MODAL
+   (uses uploadPlantPhoto from storage.js,
+    which auto-sets cover photo if none set)
+===================================== */
+
+async function uploadEditPhoto(){
+
+    if(!editingPlantId) return;
+
+    const fileInput = document.getElementById("editPhotoFile");
+    const file = fileInput?.files?.[0];
+
+    if(!file){
+        setText("editPhotoStatus", "Please choose an image first.");
+        return;
+    }
+
+    setText("editPhotoStatus", "Uploading...");
+
+    const result = await uploadPlantPhoto(editingPlantId, file);
+
+    if(result.success){
+        setText("editPhotoStatus", "Photo uploaded.");
+        fileInput.value = "";
+        const preview = document.getElementById("editPhotoPreview");
+        if(preview) preview.innerHTML = "";
+
+        // Refresh in-memory plant + table thumbnails so admin sees the update
+        await loadAdminPlants();
+    } else {
+        setText("editPhotoStatus", "Upload failed: " + (result.error || "unknown error"));
+    }
+
+}
+
+/* =====================================
+   PHOTO PREVIEW ON FILE SELECT
+===================================== */
+
+function setupEditPhotoPreview(){
+    const fileInput = document.getElementById("editPhotoFile");
+    if(!fileInput) return;
+
+    fileInput.addEventListener("change", () => {
+        const file = fileInput.files?.[0];
+        const preview = document.getElementById("editPhotoPreview");
+        if(!file || !preview) return;
+
+        const url = URL.createObjectURL(file);
+        preview.innerHTML =
+            `<img src="${url}" class="w-32 h-24 object-cover rounded-lg border">`;
+    });
+}
+
+/* =====================================
+   WIRE UP NEW PHOTO/VIDEO BUTTONS
+===================================== */
+
+function setupVideoAndPhotoHandlers(){
+
+    document.getElementById("uploadEditPhotoBtn")
+        ?.addEventListener("click", uploadEditPhoto);
+
+    document.getElementById("addEditVideoBtn")
+        ?.addEventListener("click", addEditVideo);
+
+    setupEditPhotoPreview();
+
 }
 
 async function saveEditedPlant(){
@@ -865,5 +1055,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Logout
     document.getElementById("logoutBtn")
         ?.addEventListener("click", logoutAdmin);
+
+    // New: photo upload + video add buttons in edit modal
+    setupVideoAndPhotoHandlers();
 
 });
