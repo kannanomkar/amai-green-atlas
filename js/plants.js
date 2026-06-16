@@ -727,9 +727,6 @@ async function addPlantVideo({
     const user =
     await getCurrentUser();
 
-    if(!user)
-        return null;
-
     const {
 
         data,
@@ -753,7 +750,7 @@ async function addPlantVideo({
         title,
 
         added_by:
-        user.id
+        user ? user.id : null
 
     })
 
